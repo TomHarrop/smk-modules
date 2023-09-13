@@ -1,6 +1,129 @@
 #!/usr/bin/env python3
 
-# Downstream processing.
+import re
+import tempfile
+
+
+#############
+# FUNCTIONS #
+#############
+
+def get_sample_input(wildcards):
+    sample_name = wildcards.sample
+    rd = Path(read_directory)
+    sample_files = {
+        'r1': [x for x in rd.glob(f'{sample_name}*.[rR]1.*')],
+        'r2': [x for x in rd.glob(f'{sample_name}*.[rR]2.*')],
+        'unpaired': [x for x in rd.glob(f'{sample_name}*.unpaired.*')]
+    }
+    for key in sample_files:
+        # check for suspicious files
+        if len(sample_files[key]) > 1:
+            raise ValueError(
+                f'Found more than one file for sample {sample_name}',
+                f'{print(sample_files)}'
+                )
+        else:
+            # unlise the single file
+            sample_files[key] = sample_files[key][0].as_posix()
+    return(sample_files)
+
+
+def resolve_input(wildcards, input):
+    output_dict = {}
+    for key, value in input.items():
+        try:
+            output_dict[key] = Path(value).resolve()
+        except TypeError as e:
+            print(f'Warning: not trying to resolve {key}',
+                  file=sys.stderr)
+    return output_dict
+
+
+def resolve_output(wildcards, output):
+    output_dict = {}
+    for key, value in output.items():
+        try:
+            output_dict[key] = Path(value).resolve()
+        except TypeError as e:
+            print(f'Warning: not trying to resolve {key}',
+                  file=sys.stderr)
+    return output_dict
+
+
+def sample_name_sanitiser(sample_name):
+    if re.compile('[^a-zA-Z0-9_-]').search(sample_name):
+        raise ValueError(f'{sample_name} contains special character(s)')
+
+
+###########
+# GLOBALS #
+###########
+
+# containers
+hybpiper = 'docker://quay.io/biocontainers/hybpiper:2.1.6--h031d066_0'
+pigz = 'docker://quay.io/biocontainers/pigz:2.3.4'
+
+# set up directories
+outdir = Path(config['outdir'] if 'outdir' in config else '.')
+print(f'outdir: {outdir}')
+logdir = Path(outdir, 'logs')
+
+# set up a temporary directory for this run
+try:
+    run_tmpdir = config['run_tmpdir']
+    print(f'Caught run_tmpdir {run_tmpdir}')
+except KeyError as e:
+    print(f'{e} not set in config')
+    run_tmpdir = tempfile.mkdtemp()
+    print(f'Setting run_tmpdir to {run_tmpdir}')
+    print('This probably won\'t work on a cluster!')
+
+# catch samples
+all_samples = sorted(set(config['sample_list']))
+print('Caught sample list:')
+print(all_samples)
+
+# catch read directory
+read_directory = config['read_directory']
+print(f'Caught read_directory: {read_directory}')
+
+# catch config
+target_file = config['target_file']
+print(f'Caught target_file: {target_file}')
+
+# define outputs
+namelist = Path(
+    outdir,
+    'namelist.txt'
+    )
+
+# make sure nothing crazy happens with sample names
+wildcard_constraints:
+    sample = '|'.join(all_samples)
+
+
+############
+# WORKFLOW #
+############
+
+rule target:
+    input:
+        expand(
+            Path(
+                outdir,
+                'sequences.{type}.tar.gz'
+                ),
+            type=['dna','aa','intron','supercontig']
+            ),
+        expand(
+            Path(
+                outdir,
+                'hybpiper_stats.{type}.tsv'
+                ),
+            type=['gene', 'supercontig']
+            )
+
 
 # Need lots of files here, try to do it in the job tmp area provided to
 # Snakemake (not the individual jobs). This needs to be passed as a config
@@ -16,7 +139,6 @@ rule archive_hybpiper_sequences:
     output:
         tarfile = Path(
             outdir,
-            '020_hybpiper',
             'sequences.{type}.tar.gz'
             )
     params:
@@ -36,16 +158,8 @@ rule archive_hybpiper_sequences:
 
 rule hybpiper_retrieve_sequences:
     input:
-        # target = Path(
-        #     output_root, 
-        #     '000_target_files',
-        #     'combined_targetfiles.fixed.fasta'),
         target = target_file,
-        namelist = Path(
-            scratch_root,
-            '020_hybpiper',
-            'namelist.txt'
-            ),
+        namelist = namelist,
         sample_files = expand(
             Path(
                 run_tmpdir,
@@ -63,7 +177,8 @@ rule hybpiper_retrieve_sequences:
                 )
             ),
     params:
-        resolve_input
+        resolve_input,
+        run_tmpdir = run_tmpdir
     log:
         Path(
             logdir,
@@ -79,7 +194,7 @@ rule hybpiper_retrieve_sequences:
     container:
         hybpiper
     shell:
-        'cd {run_tmpdir} || exit 1 '
+        'cd {params.run_tmpdir} || exit 1 '
         '&& '
         'hybpiper retrieve_sequences '
         '--targetfile_dna {params[0][target]} '
@@ -91,16 +206,8 @@ rule hybpiper_retrieve_sequences:
 
 rule hybpiper_stats:
     input:
-        # target = Path(
-        #     output_root, 
-        #     '000_target_files',
-        #     'combined_targetfiles.fixed.fasta'),
         target = target_file,
-        namelist = Path(
-            scratch_root,
-            '020_hybpiper',
-            'namelist.txt'
-            ),
+        namelist = namelist,
         sample_files = expand(
             Path(
                 run_tmpdir,
@@ -111,11 +218,9 @@ rule hybpiper_stats:
     output:
         seq_lengths = Path(
             outdir,
-            '020_hybpiper',
             'seq_lengths.{type}.tsv'),
         stats = Path(
             outdir,
-            '020_hybpiper',
             'hybpiper_stats.{type}.tsv')
     params:
         resolve_input,
@@ -153,7 +258,6 @@ rule unarchive_hybpiper_results:
     input:
         tarfile = Path(
             outdir,
-            '020_hybpiper',
             'assemble',
             '{sample}.tar.gz'
             )
@@ -169,7 +273,7 @@ rule unarchive_hybpiper_results:
     resources:
         time = lambda wildcards, attempt: 20 * attempt,
     container:
-        tcdemux
+        hybpiper
     shell:
         'mkdir -p {output.folder} '
         '&& '
@@ -183,15 +287,13 @@ rule unarchive_hybpiper_results:
 rule hybpiper_pigz:
     input:
         Path(
-            scratch_root,
-            '020_hybpiper',
+            run_tmpdir,
             'assemble',
             '{sample}.tar'
             )
     output:
         Path(
             outdir,
-            '020_hybpiper',
             'assemble',
             '{sample}.tar.gz'
             )
@@ -207,16 +309,11 @@ rule hybpiper_pigz:
 rule hybpiper_assemble:
     input:
         unpack(get_sample_input),
-        # target = Path(
-        #     output_root, 
-        #     '000_target_files',
-        #     'combined_targetfiles.fixed.fasta'),
         target = target_file
     output:
         tarfile = temp(
             Path(
-                scratch_root,
-                '020_hybpiper',
+                run_tmpdir,
                 'assemble',
                 '{sample}.tar'
                 )
@@ -269,10 +366,7 @@ rule hybpiper_assemble:
 # prepare for hybpiper
 rule generate_namelist:
     output:
-        Path(
-            scratch_root,
-            '020_hybpiper',
-            'namelist.txt')
+        namelist
     run:
         with open(output[0], 'wt') as f:
             f.write("\n".join(all_samples))
