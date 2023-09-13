@@ -43,7 +43,7 @@ module hybpiper:
         github(
             "tomharrop/smk-modules",
             path="modules/hybpiper/Snakefile",
-            commit="f800e90"
+            tag="0.0.1"
         )
     config:
         config['hybpiper']
