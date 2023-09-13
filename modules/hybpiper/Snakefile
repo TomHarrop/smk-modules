@@ -368,13 +368,11 @@ rule hybpiper_assemble:
 rule hybpiper_fix_targetfile:
     input:
         target = target_file,
-        ctl = temp(
-            Path(
+        ctl = Path(
                 run_tmpdir,
                 'check',
                 'fix_targetfile.ctl'
                 )
-            )
     output:
         target_out = fixed_tf,
         report = Path(
