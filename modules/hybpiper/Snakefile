@@ -1,0 +1,278 @@
+#!/usr/bin/env python3
+
+# Downstream processing.
+
+# Need lots of files here, try to do it in the job tmp area provided to
+# Snakemake (not the individual jobs). This needs to be passed as a config
+# parameter to the call to snakemake, because TMPDIRs are interpreted at
+# runtime. This would mean that worker nodes get a different run_tmpdir if
+# tempfile.mkdtemp() is used in the Snakefile.
+rule archive_hybpiper_sequences:
+    input:
+        folder = Path(
+            run_tmpdir,
+            'sequences.{type}'
+            )
+    output:
+        tarfile = Path(
+            outdir,
+            '020_hybpiper',
+            'sequences.{type}.tar.gz'
+            )
+    params:
+        resolve_output
+    threads:
+        lambda wildcards, attempt: 4 * attempt
+    resources:
+        time = lambda wildcards, attempt: 20 * attempt
+    container:
+        pigz
+    shell:
+        'cd {input.folder} || exit 1 '
+        '&& '
+        'tar -cf - . '
+        '| pigz -p {threads} -9 '
+        '> {params[0][tarfile]} '
+
+rule hybpiper_retrieve_sequences:
+    input:
+        # target = Path(
+        #     output_root, 
+        #     '000_target_files',
+        #     'combined_targetfiles.fixed.fasta'),
+        target = target_file,
+        namelist = Path(
+            scratch_root,
+            '020_hybpiper',
+            'namelist.txt'
+            ),
+        sample_files = expand(
+            Path(
+                run_tmpdir,
+                '{sample}'
+                ),
+            sample=all_samples
+            ),
+    output:
+        fasta_dir = temporary(
+            directory(
+                Path(
+                    run_tmpdir,
+                    'sequences.{type}'
+                    )
+                )
+            ),
+    params:
+        resolve_input
+    log:
+        Path(
+            logdir,
+            'hybpiper',
+            'hybpiper_retrieve_sequences.{type}.log').resolve()
+    benchmark:
+        Path(
+            logdir,
+            'hybpiper',
+            'hybpiper_retrieve_sequences.{type}.benchmark.log').resolve()
+    resources:
+        time = lambda wildcards, attempt: 120 * attempt,
+    container:
+        hybpiper
+    shell:
+        'cd {run_tmpdir} || exit 1 '
+        '&& '
+        'hybpiper retrieve_sequences '
+        '--targetfile_dna {params[0][target]} '
+        '--sample_names {params[0][namelist]} '
+        '--fasta_dir sequences.{wildcards.type} '
+        '{wildcards.type} '
+        '&> {log} '
+
+
+rule hybpiper_stats:
+    input:
+        # target = Path(
+        #     output_root, 
+        #     '000_target_files',
+        #     'combined_targetfiles.fixed.fasta'),
+        target = target_file,
+        namelist = Path(
+            scratch_root,
+            '020_hybpiper',
+            'namelist.txt'
+            ),
+        sample_files = expand(
+            Path(
+                run_tmpdir,
+                '{sample}'
+                ),
+            sample=all_samples
+            ),
+    output:
+        seq_lengths = Path(
+            outdir,
+            '020_hybpiper',
+            'seq_lengths.{type}.tsv'),
+        stats = Path(
+            outdir,
+            '020_hybpiper',
+            'hybpiper_stats.{type}.tsv')
+    params:
+        resolve_input,
+        resolve_output,
+        parent = lambda wildcards, input:
+            Path(input.sample_files[0]).resolve().parent,
+    log:
+        Path(
+            logdir,
+            'hybpiper',
+            'hybpiper_stats.{type}.log').resolve()
+    benchmark:
+        Path(
+            logdir,
+            'hybpiper',
+            'hybpiper_stats.{type}.benchmark.log').resolve()
+    resources:
+        time = lambda wildcards, attempt: 120 * attempt,
+    container:
+        hybpiper
+    shell:
+        'cd {params.parent} || exit 1 '
+        '&& '
+        'hybpiper stats '
+        '--targetfile_dna {params[0][target]} '
+        '--stats_filename hybpiper_stats.{wildcards.type} '
+        '--seq_lengths_filename seq_lengths.{wildcards.type} '
+        '{wildcards.type} '
+        '{params[0][namelist]} '
+        '&> {log} '
+        '&& mv hybpiper_stats.{wildcards.type}.tsv {params[1][stats]} '
+        '&& mv seq_lengths.{wildcards.type}.tsv {params[1][seq_lengths]} '
+
+rule unarchive_hybpiper_results:
+    input:
+        tarfile = Path(
+            outdir,
+            '020_hybpiper',
+            'assemble',
+            '{sample}.tar.gz'
+            )
+    output:
+        folder = temporary(
+            directory(
+                Path(
+                    run_tmpdir,
+                    '{sample}'
+                    )
+                )
+            )
+    resources:
+        time = lambda wildcards, attempt: 20 * attempt,
+    container:
+        tcdemux
+    shell:
+        'mkdir -p {output.folder} '
+        '&& '
+        'gzip -dc {input.tarfile} '
+        '| tar -xf - '
+        '--strip-components=1 '
+        '-C {output.folder} '
+
+
+# Run hybpiper and compress the resuilts
+rule hybpiper_pigz:
+    input:
+        Path(
+            scratch_root,
+            '020_hybpiper',
+            'assemble',
+            '{sample}.tar'
+            )
+    output:
+        Path(
+            outdir,
+            '020_hybpiper',
+            'assemble',
+            '{sample}.tar.gz'
+            )
+    resources:
+        time = lambda wildcards, attempt: 10 * attempt,
+    threads:
+        4
+    container:
+        pigz
+    shell:
+        'pigz -p {threads} -9 > {output} < {input} '
+
+rule hybpiper_assemble:
+    input:
+        unpack(get_sample_input),
+        # target = Path(
+        #     output_root, 
+        #     '000_target_files',
+        #     'combined_targetfiles.fixed.fasta'),
+        target = target_file
+    output:
+        tarfile = temp(
+            Path(
+                scratch_root,
+                '020_hybpiper',
+                'assemble',
+                '{sample}.tar'
+                )
+            )
+    params:
+        resolve_input,
+        resolve_output
+    log:
+        hybpiper = Path(
+            logdir,
+            'hybpiper',
+            'hybpiper_assemble.{sample}.log').resolve()
+    benchmark:
+        Path(
+            logdir,
+            'hybpiper',
+            'hybpiper_assemble.benchmark.{sample}.log').resolve()
+    threads:
+        lambda wildcards, attempt: 16 * attempt,
+    resources:
+        time = lambda wildcards, attempt: 120 * attempt,
+        mem_mb=24000
+    container:
+        hybpiper
+    shell:
+        'workdir=$( mktemp -d ) '
+        '; '
+        'cd $workdir '
+        '; '
+        # hybpiper chokes on empty fastq files. Only add unpaired if it has reads
+        # in it.
+        'unpaired_arg="" '
+        '&& '
+        'if [ -s {params[0][unpaired]} ]; then unpaired_arg="--unpaired {params[0][unpaired]} "; fi '
+        '&& '
+        'hybpiper assemble '
+        '--readfiles {params[0][r1]} {params[0][r2]} '
+        '$unpaired_arg'
+        '--targetfile_dna {params[0][target]} '
+        '--diamond '
+        '--cpu {threads} '
+        '--prefix {wildcards.sample} '
+        '&> {log.hybpiper} '
+        # the amount of temp files chew through scratch quota
+        # try to output to a tar.gz
+        '; '
+        'tar -cv {wildcards.sample} >> {params[1][tarfile]} '
+        '2>> {log.hybpiper} '
+
+# prepare for hybpiper
+rule generate_namelist:
+    output:
+        Path(
+            scratch_root,
+            '020_hybpiper',
+            'namelist.txt')
+    run:
+        with open(output[0], 'wt') as f:
+            f.write("\n".join(all_samples))
