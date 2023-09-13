@@ -98,6 +98,11 @@ namelist = Path(
     'namelist.txt'
     )
 
+fixed_tf = Path(
+    outdir,
+    'target_file.fixed.fasta'
+    )
+
 # make sure nothing crazy happens with sample names
 wildcard_constraints:
     sample = '|'.join(all_samples)
@@ -158,7 +163,7 @@ rule archive_hybpiper_sequences:
 
 rule hybpiper_retrieve_sequences:
     input:
-        target = target_file,
+        target = fixed_tf,
         namelist = namelist,
         sample_files = expand(
             Path(
@@ -182,13 +187,11 @@ rule hybpiper_retrieve_sequences:
     log:
         Path(
             logdir,
-            'hybpiper',
-            'hybpiper_retrieve_sequences.{type}.log').resolve()
+            'retrieve_sequences.{type}.log').resolve()
     benchmark:
         Path(
             logdir,
-            'hybpiper',
-            'hybpiper_retrieve_sequences.{type}.benchmark.log').resolve()
+            'retrieve_sequences.{type}.benchmark.log').resolve()
     resources:
         time = lambda wildcards, attempt: 120 * attempt,
     container:
@@ -206,7 +209,7 @@ rule hybpiper_retrieve_sequences:
 
 rule hybpiper_stats:
     input:
-        target = target_file,
+        target = fixed_tf,
         namelist = namelist,
         sample_files = expand(
             Path(
@@ -230,13 +233,11 @@ rule hybpiper_stats:
     log:
         Path(
             logdir,
-            'hybpiper',
-            'hybpiper_stats.{type}.log').resolve()
+            'stats.{type}.log').resolve()
     benchmark:
         Path(
             logdir,
-            'hybpiper',
-            'hybpiper_stats.{type}.benchmark.log').resolve()
+            'stats.{type}.benchmark.log').resolve()
     resources:
         time = lambda wildcards, attempt: 120 * attempt,
     container:
@@ -309,7 +310,7 @@ rule hybpiper_pigz:
 rule hybpiper_assemble:
     input:
         unpack(get_sample_input),
-        target = target_file
+        target = fixed_tf
     output:
         tarfile = temp(
             Path(
@@ -324,13 +325,13 @@ rule hybpiper_assemble:
     log:
         hybpiper = Path(
             logdir,
-            'hybpiper',
-            'hybpiper_assemble.{sample}.log').resolve()
+            'assemble',
+            '{sample}.log').resolve()
     benchmark:
         Path(
             logdir,
-            'hybpiper',
-            'hybpiper_assemble.benchmark.{sample}.log').resolve()
+            'assemble',
+            'benchmark.{sample}.log').resolve()
     threads:
         lambda wildcards, attempt: 16 * attempt,
     resources:
@@ -362,6 +363,98 @@ rule hybpiper_assemble:
         '; '
         'tar -cv {wildcards.sample} >> {params[1][tarfile]} '
         '2>> {log.hybpiper} '
+
+# fix the targetfile
+rule hybpiper_fix_targetfile:
+    input:
+        target = target_file,
+        ctl = temp(
+            Path(
+                run_tmpdir,
+                'check',
+                'fix_targetfile.ctl'
+                )
+            )
+    output:
+        target_out = fixed_tf,
+        report = Path(
+            logdir,
+            'target_file_report.txt'
+            )
+    params:
+        resolve_input,
+        resolve_output
+    log:
+        Path(
+            logdir,
+            'fix_targetfile.log').resolve()
+    benchmark:
+        Path(
+            logdir,
+            'fix_targetfile.benchmark.log').resolve()
+    threads:
+        1
+    resources:
+        time = lambda wildcards, attempt: 10 * attempt,
+        mem_mb = lambda wildcards, attempt: 1000 * attempt
+    container:
+        hybpiper
+    shell:
+        'workdir=$( mktemp -d ) '
+        '; '
+        'cd $workdir '
+        '; '
+        'ln -s {params[0][target]} ./target_file.fasta '
+        '&& '
+        'hybpiper fix_targetfile '
+        '--targetfile_dna target_file.fasta '
+        '--allow_gene_removal '
+        '{params[0][ctl]} '
+        '&> {log} '
+        '&& '
+        'cp target_file_fixed.fasta {params[1][target_out]} '
+        '&& '
+        'cp fix_targetfile_report.tsv {params[1][report]} '
+
+rule hybpiper_check_targetfile:
+    input:
+        target = target_file
+    output:
+        ctl = temp(
+            Path(
+                run_tmpdir,
+                'check',
+                'fix_targetfile.ctl'
+                )
+            )
+    params:
+        resolve_input,
+        resolve_output
+    log:
+        Path(
+            logdir,
+            'check_targetfile.log').resolve()
+    benchmark:
+        Path(
+            logdir,
+            'check_targetfile.benchmark.log').resolve()
+    threads:
+        1
+    resources:
+        time = lambda wildcards, attempt: 10 * attempt,
+        mem_mb = lambda wildcards, attempt: 1000 * attempt
+    container:
+        hybpiper
+    shell:
+        'workdir=$( mktemp -d ) '
+        '; '
+        'cd $workdir '
+        '; '
+        'hybpiper check_targetfile '
+        '--targetfile_dna {params[0][target]} '
+        '&> {log} '
+        '&& '
+        'cp *.ctl {params[1][ctl]} '
 
 # prepare for hybpiper
 rule generate_namelist:
