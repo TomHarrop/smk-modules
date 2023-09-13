@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import pandas as pd
+import tempfile
 
 sample_data = Path(
     'test-data',
@@ -31,6 +32,7 @@ if 'hybpiper' not in config.keys():
     config['hybpiper'] = {}
 
 hybpiper_config = config['hybpiper']
+hybpiper_config['run_tmpdir'] = tempfile.mkdtemp()
 hybpiper_config['sample_list'] = all_samples
 hybpiper_config['read_directory'] = read_directory
 hybpiper_config['target_file'] = target_file
@@ -43,8 +45,7 @@ module hybpiper:
         github(
             "tomharrop/smk-modules",
             path="modules/hybpiper/Snakefile",
-            # tag="0.0.1"
-            commit="12b29c3"
+            tag="0.0.2"
         )
     config:
         config['hybpiper']

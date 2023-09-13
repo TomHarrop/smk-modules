@@ -6,3 +6,4 @@ hybpiper:
   read_directory: test-data/hybpiper/sample_reads
   target_file: test-data/hybpiper/sample_reads/combined_targetfiles.fixed.fasta
   outdir: test-output/hybpiper
+  run_tmpdir: /tmp
