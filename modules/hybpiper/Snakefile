@@ -2,6 +2,7 @@
 
 import re
 import tempfile
+from snakemake.logging import logger
 
 
 #############
@@ -18,7 +19,8 @@ def get_sample_input(wildcards):
     }
     # check for unpaired output
     if len(sample_files['unpaired']) == 0:
-        print(f'No unpaired file for {sample_name}')
+        logger.warning(f'No unpaired file for {sample_name}.')
+        logger.warning('Running hybpiper without unpaired input for this sample.')
         sample_files.pop('unpaired')
     for key in sample_files:
         # check for suspicious files
@@ -39,8 +41,7 @@ def resolve_input(wildcards, input):
         try:
             output_dict[key] = Path(value).resolve()
         except TypeError as e:
-            print(f'Warning: not trying to resolve {key}',
-                  file=sys.stderr)
+            logger.debug(f'Not trying to resolve {key}')
     return output_dict
 
 
@@ -50,8 +51,7 @@ def resolve_output(wildcards, output):
         try:
             output_dict[key] = Path(value).resolve()
         except TypeError as e:
-            print(f'Warning: not trying to resolve {key}',
-                  file=sys.stderr)
+            logger.debug(f'Not trying to resolve {key}')
     return output_dict
 
 
@@ -70,31 +70,33 @@ pigz = 'docker://quay.io/biocontainers/pigz:2.3.4'
 
 # set up directories
 outdir = Path(config['outdir'] if 'outdir' in config else '.')
-print(f'outdir: {outdir}')
+logger.debug(f'outdir: {outdir}')
 logdir = Path(outdir, 'logs')
+
 
 # set up a temporary directory for this run
 try:
     run_tmpdir = config['run_tmpdir']
-    print(f'Caught run_tmpdir {run_tmpdir}')
+    logger.info(f'Caught run_tmpdir {run_tmpdir}')
 except KeyError as e:
-    print(f'{e} not set in config')
+    logger.info(f'{e} not set in config')
     run_tmpdir = tempfile.mkdtemp()
-    print(f'Setting run_tmpdir to {run_tmpdir}')
-    print('This probably won\'t work on a cluster!')
+    logger.info(f'Setting run_tmpdir to {run_tmpdir}')
+    logger.warning('This probably won\'t work on a cluster!')
+
 
 # catch samples
 all_samples = sorted(set(config['sample_list']))
-print('Caught sample list:')
-print(all_samples)
+logger.debug('Caught sample list:')
+logger.debug(all_samples)
 
 # catch read directory
 read_directory = config['read_directory']
-print(f'Caught read_directory: {read_directory}')
+logger.debug(f'Caught read_directory: {read_directory}')
 
 # catch config
 target_file = config['target_file']
-print(f'Caught target_file: {target_file}')
+logger.debug(f'Caught target_file: {target_file}')
 
 # define outputs
 namelist = Path(
@@ -110,7 +112,6 @@ fixed_tf = Path(
 # make sure nothing crazy happens with sample names
 wildcard_constraints:
     sample = '|'.join(all_samples)
-
 
 ############
 # WORKFLOW #
