@@ -16,6 +16,10 @@ def get_sample_input(wildcards):
         'r2': [x for x in rd.glob(f'{sample_name}*.[rR]2.*')],
         'unpaired': [x for x in rd.glob(f'{sample_name}*.unpaired.*')]
     }
+    # check for unpaired output
+    if len(sample_files['unpaired']) == 0:
+        print(f'No unpaired file for {sample_name}')
+        sample_files.pop('unpaired')
     for key in sample_files:
         # check for suspicious files
         if len(sample_files[key]) > 1:
@@ -24,7 +28,7 @@ def get_sample_input(wildcards):
                 f'{print(sample_files)}'
                 )
         else:
-            # unlise the single file
+            # unlist the single file
             sample_files[key] = sample_files[key][0].as_posix()
     return(sample_files)
 
@@ -321,7 +325,11 @@ rule hybpiper_assemble:
             )
     params:
         resolve_input,
-        resolve_output
+        resolve_output,
+        unpaired = lambda wildcards, input:
+            Path(input.unpaired).resolve() \
+            if hasattr(input, 'unpaired') \
+            else tempfile.mkstemp()[1]
     log:
         hybpiper = Path(
             logdir,
@@ -348,7 +356,7 @@ rule hybpiper_assemble:
         # in it.
         'unpaired_arg="" '
         '&& '
-        'if [ -s {params[0][unpaired]} ]; then unpaired_arg="--unpaired {params[0][unpaired]} "; fi '
+        'if [ -s {params.unpaired} ]; then unpaired_arg="--unpaired {params.unpaired} "; fi '
         '&& '
         'hybpiper assemble '
         '--readfiles {params[0][r1]} {params[0][r2]} '
