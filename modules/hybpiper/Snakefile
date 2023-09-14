@@ -9,32 +9,6 @@ from snakemake.logging import logger
 # FUNCTIONS #
 #############
 
-def get_sample_input(wildcards):
-    sample_name = wildcards.sample
-    rd = Path(read_directory)
-    sample_files = {
-        'r1': [x for x in rd.glob(f'{sample_name}*.[rR]1.*')],
-        'r2': [x for x in rd.glob(f'{sample_name}*.[rR]2.*')],
-        'unpaired': [x for x in rd.glob(f'{sample_name}*.unpaired.*')]
-    }
-    # check for unpaired output
-    if len(sample_files['unpaired']) == 0:
-        logger.warning(f'No unpaired file for {sample_name}.')
-        logger.warning('Running hybpiper without unpaired input for this sample.')
-        sample_files.pop('unpaired')
-    for key in sample_files:
-        # check for suspicious files
-        if len(sample_files[key]) > 1:
-            raise ValueError(
-                f'Found more than one file for sample {sample_name}',
-                f'{print(sample_files)}'
-                )
-        else:
-            # unlist the single file
-            sample_files[key] = sample_files[key][0].as_posix()
-    return(sample_files)
-
-
 def resolve_input(wildcards, input):
     output_dict = {}
     for key, value in input.items():
@@ -314,7 +288,18 @@ rule hybpiper_pigz:
 
 rule hybpiper_assemble:
     input:
-        unpack(get_sample_input),
+        r1 = Path(
+            read_directory,
+            '{sample}.r1.fastq.gz'
+            ),
+        r2 = Path(
+            read_directory,
+            '{sample}.r2.fastq.gz'
+            ),
+        unpaired = Path(
+            read_directory,
+            '{sample}.unpaired.fastq.gz'
+            ),
         target = fixed_tf
     output:
         tarfile = temp(
@@ -327,10 +312,6 @@ rule hybpiper_assemble:
     params:
         resolve_input,
         resolve_output,
-        unpaired = lambda wildcards, input:
-            Path(input.unpaired).resolve() \
-            if hasattr(input, 'unpaired') \
-            else tempfile.mkstemp()[1]
     log:
         hybpiper = Path(
             logdir,
@@ -357,7 +338,7 @@ rule hybpiper_assemble:
         # in it.
         'unpaired_arg="" '
         '&& '
-        'if [ -s {params.unpaired} ]; then unpaired_arg="--unpaired {params.unpaired} "; fi '
+        'if [ -s {params[0][unpaired]} ]; then unpaired_arg="--unpaired {params[0][unpaired]} "; fi '
         '&& '
         'hybpiper assemble '
         '--readfiles {params[0][r1]} {params[0][r2]} '
