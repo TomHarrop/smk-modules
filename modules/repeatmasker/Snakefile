@@ -1,0 +1,233 @@
+#!/usr/bin/env python3
+
+import re
+import tempfile
+from snakemake.logging import logger
+
+###########
+# GLOBALS #
+###########
+
+# containers
+funannotate = "docker://nextgenusfs/funannotate:v1.8.15"
+tetools = "docker://dfam/tetools:1.85"
+bbmap = "docker://quay.io/biocontainers/bbmap:39.01--h92535d8_1"
+
+# set up a temporary directory for this run
+try:
+    run_tmpdir = config["run_tmpdir"]
+    logger.info(f"Caught run_tmpdir {run_tmpdir}")
+except KeyError as e:
+    logger.info(f"{e} not set in config")
+    run_tmpdir = tempfile.mkdtemp()
+    logger.info(f"Setting run_tmpdir to {run_tmpdir}")
+    logger.warning("This probably won't work on a cluster!")
+
+# set up directories
+outdir = Path(config["outdir"] if "outdir" in config else ".")
+logger.debug(f"outdir: {outdir}")
+logdir = Path(outdir, "logs")
+benchdir = Path(logdir, "benchmarks")
+
+# catch query_genome
+query_genome = config["query_genome"]
+rm_output = Path(config["rm_output"])
+
+logger.info(f"Masking query_genome {query_genome}")
+logger.info(f"Writing output to {rm_output}")
+
+#########
+# RULES #
+#########
+
+
+# collect the output
+rule collect:
+    input:
+        Path(
+            outdir,
+            "020_repeatmasker",
+            "query.cleaned.fa.masked",
+        ),
+    output:
+        rm_output,
+    log:
+        Path(logdir, "reformat.log"),
+    container:
+        bbmap
+    shell:
+        "reformat.sh in={input} out={output} zl=9 2>{log}"
+
+
+# repeat modeller / masker
+rule rm_mask:
+    input:
+        cons=Path(
+            outdir,
+            "020_repeatmasker",
+            "query-families.fa.classified",
+        ),
+        fa=Path(outdir, "010_clean_query", "query.cleaned.fa"),
+    output:
+        temp(
+            Path(
+                outdir,
+                "020_repeatmasker",
+                "query.cleaned.fa.masked",
+            )
+        ),
+    params:
+        wd=lambda wildcards, input: Path(input.cons).parent.resolve(),
+        fa=lambda wildcards, input: Path(input.fa).resolve(),
+        threads=lambda wildcards, threads: int(threads // 4),
+    log:
+        Path(logdir, "rm_mask.log").resolve(),
+    benchmark:
+        Path(benchdir, "rm_mask.txt").resolve()
+    threads: lambda wildcards, attempt: 12 * attempt
+    resources:
+        time=lambda wildcards, attempt: 1440 * attempt,
+        mem_mb=lambda wildcards, attempt: 12e3 * attempt,
+    container:
+        tetools
+    shell:
+        "cd {params.wd} || exit 1 ; "
+        "RepeatMasker "
+        "-engine ncbi "
+        "-pa {params.threads} "
+        "-lib query-families.fa.classified "
+        "-dir {params.wd} "
+        "-gccalc -xsmall -gff -html "
+        "{params.fa} "
+        "&> {log} "
+        "mv query.cleaned.fa.masked {output}"
+
+
+rule rm_classify:
+    input:
+        Path(outdir, "020_repeatmasker", "query-families.stk"),
+        Path(outdir, "020_repeatmasker", "query-families.fa"),
+    output:
+        Path(
+            outdir,
+            "020_repeatmasker",
+            "query-families.fa.classified",
+        ),
+    params:
+        wd=lambda wildcards, input: Path(input[0]).parent.resolve(),
+    log:
+        Path(logdir, "rm_classify.log").resolve(),
+    benchmark:
+        Path(benchdir, "rm_classify.txt").resolve()
+    threads: lambda wildcards, attempt: 10 * attempt
+    resources:
+        time=lambda wildcards, attempt: 60 * attempt,
+        mem_mb=lambda wildcards, attempt: 12e3 * attempt,
+    container:
+        tetools
+    shell:
+        "cd {params.wd} || exit 1 ; "
+        "RepeatClassifier "
+        "-threads {threads} "
+        "-consensi query-families.fa "
+        "-stockholm query-families.stk "
+        "&> {log}"
+
+
+rule rm_model:
+    input:
+        tx=Path(outdir, "020_repeatmasker", "query.translation"),
+    output:
+        Path(outdir, "020_repeatmasker", "query-families.stk"),
+        Path(outdir, "020_repeatmasker", "query-families.fa"),
+    params:
+        wd=lambda wildcards, input: Path(input.tx).parent.resolve(),
+    log:
+        Path(logdir, "rm_model.log").resolve(),
+    benchmark:
+        Path(benchdir, "rm_model.txt").resolve()
+    threads: lambda wildcards, attempt: 10 * attempt
+    resources:
+        time=lambda wildcards, attempt: 1440 * attempt,
+        mem_mb=lambda wildcards, attempt: 12e3 * attempt,
+    container:
+        tetools
+    shell:
+        "cd {params.wd} || exit 1 "
+        "&& "
+        "RepeatModeler "
+        "-database query "
+        "-engine ncbi "
+        "-threads {threads} "
+        "&> {log}"
+
+
+rule rm_build:
+    input:
+        fa=Path(outdir, "010_clean_query", "query.cleaned.fa"),
+    output:
+        tx=Path(outdir, "020_repeatmasker", "query.translation"),
+    params:
+        wd=lambda wildcards, output: Path(output.tx).parent.resolve(),
+        fa_dir=lambda wildcards, input: Path(input.fa).parent.resolve(),
+    log:
+        Path(logdir, "rm_build.log").resolve(),
+    benchmark:
+        Path(benchdir, "rm_build.txt").resolve()
+    threads: 1
+    resources:
+        time=lambda wildcards, attempt: 120 * attempt,
+    container:
+        tetools
+    shell:
+        "mkdir -p {params.wd} && cd {params.wd} || exit 1 "
+        "&& "
+        "BuildDatabase "
+        "-name query "
+        "-engine ncbi "
+        "-dir {params.fa_dir} "
+        "&> {log} "
+
+
+# clean the input assembly
+rule clean_query:
+    input:
+        fa=Path(outdir, "000_reference-data", "query.fa"),
+    output:
+        fa=temp(Path(outdir, "010_clean_query", "query.cleaned.fa")),
+    params:
+        wd=lambda wildcards, output: Path(output.fa).parent.resolve(),
+        fa=lambda wildcards, input: Path(input.fa).resolve(),
+    log:
+        Path(logdir, "clean_query.log").resolve(),
+    benchmark:
+        Path(benchdir, "clean_query.txt").resolve()
+    threads: lambda wildcards, attempt: 20 * attempt
+    resources:
+        time=lambda wildcards, attempt: 2880 * attempt,
+        mem_mb=lambda wildcards, attempt: 24e3 * attempt,
+    container:
+        funannotate
+    shell:
+        "mkdir -p {params.wd} && cd {params.wd} || exit 1 "
+        "&& "
+        "funannotate clean "
+        "--exhaustive "
+        "--input {params.fa} "
+        "--out query.cleaned.fa "
+        "--cpus {threads} "
+        "&> {log}"
+
+
+# get the reference
+rule reformat:
+    input:
+        query_genome,
+    output:
+        temp(Path(outdir, "000_reference-data", "query.fa")),
+    log:
+        Path(logdir, "reformat.log"),
+    container:
+        bbmap
+    shell:
+        "reformat.sh in={input} out={output} 2>{log}"
