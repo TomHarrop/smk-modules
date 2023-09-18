@@ -3,7 +3,7 @@
 from pathlib import Path
 import tempfile
 
-query_genome = Path("test-data", "repeatmasker", "genome.fa")
+query_genome = Path("test-data", "repeatmasker", "genome.fa.gz")
 outdir = Path(
     "test-output",
     "repeatmasker",
@@ -25,12 +25,11 @@ config["repeatmasker"] = repeatmasker_config
 
 module repeatmasker:
     snakefile:
-        # github(
-        #     "tomharrop/smk-modules",
-        #     path="modules/repeatmasker/Snakefile",
-        #     tag="0.0.5"
-        # )
-        "../modules/repeatmasker/Snakefile"
+        github(
+            "tomharrop/smk-modules",
+            path="modules/repeatmasker/Snakefile",
+            tag="0.0.6"
+        )
     config:
         config["repeatmasker"]
 
