@@ -31,6 +31,11 @@ braker3_config["species_name"] = species_name
 config["braker3"] = braker3_config
 
 
+rule target:
+    input:
+        Path(outdir, "braker.gff3"),
+
+
 module braker3:
     snakefile:
         github(
