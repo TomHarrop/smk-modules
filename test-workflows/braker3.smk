@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 from pathlib import Path
-import tempfile
 
 gm_license = Path("test-data", "braker3", "gm_key_64")
 proteins = Path("test-data", "braker3", "proteins_fixed.fa.gz")
