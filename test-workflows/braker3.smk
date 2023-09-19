@@ -7,9 +7,7 @@ gm_license = Path("test-data", "braker3", "gm_key_64")
 proteins = Path("test-data", "braker3", "proteins_fixed.fa.gz")
 query_genome = Path("test-data", "braker3", "genome.fa.gz")
 # from http://bioinf.uni-greifswald.de/augustus/datasets/RNAseq.bam
-rnaseq = Path(
-    "test-data", "braker3", "RNAseq.bam"
-)  
+rnaseq = Path("test-data", "braker3", "RNAseq.bam")
 
 species_name = "test_species"
 
@@ -39,7 +37,7 @@ module braker3:
         github(
             "tomharrop/smk-modules",
             path="modules/braker3/Snakefile",
-            commit="87ea384",
+            tag="0.0.7",
         )
     config:
         config["braker3"]
