@@ -32,12 +32,11 @@ config["braker3"] = braker3_config
 
 module braker3:
     snakefile:
-        # github(
-        #     "tomharrop/smk-modules",
-        #     path="modules/braker3/Snakefile",
-        #     tag="0.0.6"
-        # )
-        "../modules/braker3/Snakefile"
+        github(
+            "tomharrop/smk-modules",
+            path="modules/braker3/Snakefile",
+            commit="87ea384"
+        )
     config:
         config["braker3"]
 
