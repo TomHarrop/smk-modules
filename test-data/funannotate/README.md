@@ -42,3 +42,18 @@ mv "${tmpdir}/config" "${AUGUSTUS_CONFIG_PATH}"
 
 ```
 
+Then run funannotate like this:
+
+```bash
+apptainer exec \
+    -B ${PWD},${TMPDIR},${AUGUSTUS_CONFIG_PATH} \
+    -H $(mktemp -d) \
+    --pwd ${PWD} \
+    --containall \
+    --cleanenv \
+    --writable-tmpfs \
+    --env AUGUSTUS_CONFIG_PATH="${AUGUSTUS_CONFIG_PATH}" \
+    docker://ghcr.io/tomharrop/container-funannotate:1.8.15_cv2 \
+        funannotate check
+```
+
