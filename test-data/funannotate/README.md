@@ -54,6 +54,8 @@ apptainer exec \
     --writable-tmpfs \
     --env AUGUSTUS_CONFIG_PATH="${AUGUSTUS_CONFIG_PATH}" \
     docker://ghcr.io/tomharrop/container-funannotate:1.8.15_cv2 \
-        funannotate check
+        funannotate setup \
+            -i all \
+            -d test-data/funannotate/db
 ```
 
