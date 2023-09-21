@@ -41,7 +41,7 @@ module braker3:
         github(
             "tomharrop/smk-modules",
             path="modules/braker3/Snakefile",
-            tag="0.0.7",
+            tag="0.0.8",
         )
     config:
         config["braker3"]
