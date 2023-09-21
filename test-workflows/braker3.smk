@@ -2,8 +2,7 @@
 
 from pathlib import Path
 
-gm_license = Path("test-data", "braker3", "gm_key_64")
-proteins = Path("test-data", "braker3", "proteins_fixed.fa.gz")
+proteins = Path("test-data", "braker3", "proteins.fa.gz")
 query_genome = Path("test-data", "braker3", "genome.fa.gz")
 # from http://bioinf.uni-greifswald.de/augustus/datasets/RNAseq.bam
 rnaseq = Path("test-data", "braker3", "RNAseq.bam")
@@ -21,11 +20,10 @@ if "braker3" not in config.keys():
 
 braker3_config = config["braker3"]
 
-braker3_config["gm_license"] = gm_license
 braker3_config["outdir"] = outdir
 braker3_config["proteins"] = proteins
 braker3_config["query_genome"] = query_genome
-# braker3_config["rnaseq"] = rnaseq
+braker3_config["rnaseq"] = rnaseq
 braker3_config["species_name"] = species_name
 
 config["braker3"] = braker3_config
@@ -41,7 +39,7 @@ module braker3:
         github(
             "tomharrop/smk-modules",
             path="modules/braker3/Snakefile",
-            tag="0.0.12",
+            tag="0.0.14",
         )
     config:
         config["braker3"]

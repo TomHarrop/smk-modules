@@ -1,0 +1,5 @@
+.snakemake/
+test-data/funannotate/augustus_config/
+test-data/funannotate/db/
+test-output/
+venv/
