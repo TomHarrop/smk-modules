@@ -25,7 +25,7 @@ braker3_config["gm_license"] = gm_license
 braker3_config["outdir"] = outdir
 braker3_config["proteins"] = proteins
 braker3_config["query_genome"] = query_genome
-braker3_config["rnaseq"] = rnaseq
+# braker3_config["rnaseq"] = rnaseq
 braker3_config["species_name"] = species_name
 
 config["braker3"] = braker3_config
@@ -41,7 +41,7 @@ module braker3:
         github(
             "tomharrop/smk-modules",
             path="modules/braker3/Snakefile",
-            tag="0.0.10",
+            tag="0.0.11",
         )
     config:
         config["braker3"]
