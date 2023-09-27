@@ -17,7 +17,7 @@ target_file = Path(
 read_directory = Path(
     'test-data',
     'hybpiper',
-    'sample_reads'
+    'reads'
     )
 output_directory = Path(
     'test-output',
@@ -45,7 +45,7 @@ module hybpiper:
         github(
             "tomharrop/smk-modules",
             path="modules/hybpiper/Snakefile",
-            tag="0.0.5"
+            tag="0.0.15"
         )
     config:
         config['hybpiper']
