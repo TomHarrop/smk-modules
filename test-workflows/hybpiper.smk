@@ -33,7 +33,7 @@ module hybpiper:
         github(
             "tomharrop/smk-modules",
             path="modules/hybpiper/Snakefile",
-            tag="0.0.16",
+            tag="0.0.17",
         )
     config:
         config["hybpiper"]
