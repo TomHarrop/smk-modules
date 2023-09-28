@@ -42,6 +42,7 @@ def sample_name_sanitiser(sample_name):
 # containers
 hybpiper = "docker://quay.io/biocontainers/hybpiper:2.1.6--h031d066_0"
 pigz = "docker://quay.io/biocontainers/pigz:2.3.4"
+bbmap = "docker://quay.io/biocontainers/bbmap:39.01--h92535d8_1"
 
 # set up directories
 outdir = Path(config["outdir"] if "outdir" in config else ".")
@@ -69,9 +70,10 @@ logger.debug(all_samples)
 read_directory = config["read_directory"]
 logger.debug(f"Caught read_directory: {read_directory}")
 
-# catch config
+# catch target_file
 target_file = config["target_file"]
 logger.debug(f"Caught target_file: {target_file}")
+tmp_target_file = Path(run_tmpdir, "targetfile.fasta")
 
 # define outputs
 namelist = Path(outdir, "namelist.txt")
@@ -355,7 +357,7 @@ rule hybpiper_assemble:
 # fix the targetfile
 rule hybpiper_fix_targetfile:
     input:
-        target=target_file,
+        target=tmp_target_file,
         ctl=Path(run_tmpdir, "check", "fix_targetfile.ctl"),
     output:
         target_out=fixed_tf,
@@ -393,7 +395,7 @@ rule hybpiper_fix_targetfile:
 
 rule hybpiper_check_targetfile:
     input:
-        target=target_file,
+        target=tmp_target_file,
     output:
         ctl=temp(Path(run_tmpdir, "check", "fix_targetfile.ctl")),
     params:
@@ -422,6 +424,22 @@ rule hybpiper_check_targetfile:
 
 
 # prepare for hybpiper
+rule collect_targetfile:
+    input:
+        target_file,
+    output:
+        temp(tmp_target_file),
+    log:
+        Path(logdir, "collect_targetfile.log"),
+    container:
+        bbmap
+    shell:
+        "reformat.sh "
+        "in={input} "
+        "out={output} "
+        "2>{log}"
+
+
 rule generate_namelist:
     output:
         namelist,
