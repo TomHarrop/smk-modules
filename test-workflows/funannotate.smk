@@ -7,6 +7,9 @@ import tempfile
 # from http://bioinf.uni-greifswald.de/augustus/datasets/RNAseq.bam
 rnaseq = Path("test-data", "braker3", "RNAseq.bam")
 genome = Path("test-data", "braker3", "genome.fa.gz")
+db_path = Path("test-data", "funannotate", "db")
+dmnd_db = Path("test-data", "funannotate", "eggnog", "eggnog_proteins.dmnd")
+eggnog_db = Path("test-data", "funannotate", "eggnog", "eggnog.db")
 
 outdir = Path(
     "test-output",
@@ -26,9 +29,12 @@ module funannotate:
         {
             "outdir": outdir,
             "rnaseq": rnaseq,
-            "run_tmpdir": tempfile.mkdtemp(),
+            "run_tmpdir": Path(outdir, "tmp"),  # avoid rerunning steps
             "query_genome": genome,
-            "species_name": "testspecies"
+            "species_name": "testspecies",
+            "db_path": db_path,
+            "dmnd_db": dmnd_db,
+            "eggnog_db": eggnog_db,
         }
 
 

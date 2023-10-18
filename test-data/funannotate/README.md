@@ -1,3 +1,5 @@
+# funannotate test-data
+
 ## funnannotate databases
 
 You need to specify AUGUSTUS_CONFIG_PATH to install the databases.
@@ -59,3 +61,36 @@ apptainer exec \
             -d test-data/funannotate/db
 ```
 
+## get the eggnog DB
+
+```bash
+
+mkdir -p test-data/funannotate/eggnog/
+
+wget \
+    -nH \
+    --user-agent=Mozilla/5.0 \
+    --relative \
+    --no-parent \
+    --reject "index.html*" \
+    --cut-dirs=4 \
+    -e robots=off \
+    -O test-data/funannotate/eggnog/eggnog.db.gz \
+    http://eggnogdb.embl.de/download/emapperdb-5.0.2/eggnog.db.gz
+    
+gunzip test-data/funannotate/eggnog/eggnog.db.gz
+
+
+wget \
+    -nH \
+    --user-agent=Mozilla/5.0 \
+    --relative \
+    --no-parent \
+    --reject "index.html*" \
+    --cut-dirs=4 \
+    -e robots=off \
+    -O test-data/funannotate/eggnog/eggnog_proteins.dmnd.gz \
+    http://eggnogdb.embl.de/download/emapperdb-5.0.2/eggnog_proteins.dmnd.gz
+
+gunzip test-data/funannotate/eggnog/eggnog_proteins.dmnd.gz
+```
