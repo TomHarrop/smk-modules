@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+
+from snakemake.logging import logger
+from snakemake.remote.HTTP import RemoteProvider as HTTPRemoteProvider
+import csv
+import tempfile
+
+#############
+# FUNCTIONS #
+#############
+
+
+def get_all_expts(wildcards):
+    """
+    Read the URL file AFTER it's been downloaded and parsed.
+    This and get_expt_url cause the URL file to be read many times.
+    """
+    csvfile = checkpoints.parse_run_xml.get(**wildcards).output["csv"]
+    with open(csvfile, "rt") as f:
+        reader = csv.reader(f)
+        all_expts = sorted(set(dict(reader).keys()))
+    # return expand(Path(outdir, "downloads", "{expt}"), expt=all_expts)
+    return expand(Path(run_tmpdir, "{expt}_1.fastq"), expt=all_expts)
+
+
+def get_expt_url(wildcards):
+    """
+    Read the URL file AFTER it's been downloaded and parsed.
+    This and get_all_expts cause the URL file to be read many times.
+    """
+    csvfile = checkpoints.parse_run_xml.get(**wildcards).output["csv"]
+    with open(csvfile, "rt") as f:
+        reader = csv.reader(open(csvfile))
+        expt_to_url = dict(reader)
+    return {
+        "url": HTTP.remote(expt_to_url[wildcards.expt]),
+    }
+
+
+###########
+# GLOBALS #
+###########
+
+# containers
+entrez = "docker://quay.io/biocontainers/entrez-direct:16.2--he881be0_1"
+sratools = "docker://quay.io/biocontainers/sra-tools:3.0.8--h9f5acd7_0"
+python = "docker://python:3.10.13"
+
+# set up directories
+outdir = Path(config["outdir"] if "outdir" in config else ".")
+logger.debug(f"outdir: {outdir}")
+logdir = Path(outdir, "logs")
+
+# catch input
+accession = config["accession"]
+logger.info(f"bpdownload: accession {accession}")
+
+# set up a temporary directory for this run
+try:
+    run_tmpdir = config["run_tmpdir"]
+    logger.info(f"Caught run_tmpdir {run_tmpdir}")
+except KeyError as e:
+    logger.info(f"{e} not set in config")
+    run_tmpdir = tempfile.mkdtemp()
+    logger.info(f"Setting run_tmpdir to {run_tmpdir}")
+    logger.warning("This probably won't work on a cluster!")
+
+# snakemake's downloader
+HTTP = HTTPRemoteProvider()
+
+#########
+# RULES #
+#########
+
+
+rule target:
+    input:
+        Path(outdir, "SraRunInfo.txt"),
+        get_all_expts,
+
+
+rule split_srafile:
+    input:
+        unpack(get_expt_url),
+    output:
+        r1=Path(run_tmpdir, "{expt}_1.fastq"),
+        r2=Path(run_tmpdir, "{expt}_2.fastq"),
+    params:
+        outdir=lambda wildcards, output: Path(output.r1).parent,
+        tmpdir=lambda wildcards: Path(tempfile.mkstemp()[1]),
+    log:
+        Path(logdir, "split_srafile.{expt}.log"),
+    threads: 2
+    container:
+        sratools
+    shell:
+        "fasterq-dump "
+        "--outfile {wildcards.expt} "
+        "--outdir {params.outdir} "
+        "--temp {params.tmpdir} "
+        "--threads {threads} "
+        "--details "
+        "--split-files "
+        "--log-level 5 "
+        "{input} "
+        "&> {log} "
+
+
+checkpoint parse_run_xml:
+    input:
+        xml=Path(outdir, "SraRunInfo.xml"),
+    output:
+        csv=Path(outdir, "run_to_url.txt"),
+    container:
+        python
+    script:
+        "scripts/parse_run_xml.py"
+
+
+# this maps SRR numbers to public URLs
+rule get_run_xml:
+    input:
+        Path(outdir, "response.txt"),
+    output:
+        Path(outdir, "SraRunInfo.xml"),
+    log:
+        Path(logdir, "get_run_xml.log"),
+    container:
+        entrez
+    shell:
+        "efetch -format native "
+        "< {input} "
+        "> {output} "
+        "2> {log}"
+
+
+# this maps the SRR numbers to sample names
+rule get_run_info:
+    input:
+        Path(outdir, "response.txt"),
+    output:
+        Path(outdir, "SraRunInfo.txt"),
+    log:
+        Path(logdir, "get_run_info.log"),
+    container:
+        entrez
+    shell:
+        "efetch -format runinfo "
+        "< {input} "
+        "> {output} "
+        "2> {log}"
+
+
+rule search_by_accession:
+    output:
+        temp(Path(outdir, "response.txt")),
+    params:
+        accession=accession,
+    log:
+        Path(logdir, "search_by_accession.log"),
+    container:
+        entrez
+    shell:
+        "esearch "
+        "-db sra "
+        "-query {params.accession}[bioproject] "
+        "> {output} "
+        "2> {log}"
