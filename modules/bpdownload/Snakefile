@@ -84,23 +84,18 @@ rule target:
 rule split_srafile:
     input:
         unpack(get_expt_url),
-        config=Path(run_tmpdir, "user-settings.mkfg"),
     output:
         r1=Path(run_tmpdir, "{expt}_1.fastq"),
         r2=Path(run_tmpdir, "{expt}_2.fastq"),
     params:
         outdir=lambda wildcards, output: Path(output.r1).parent,
         tmpdir=lambda wildcards: Path(run_tmpdir, f"tmp.{wildcards.expt}"),
-        # run_tmpdir=run_tmpdir,
     log:
         Path(logdir, "split_srafile.{expt}.log"),
     threads: 2
     container:
         sratools
     shell:
-        # "mkdir -p {params.run_tmpdir}/ncbi || exit 1 ; "
-        # "mkdir -p ~/.ncbi || exit 1 ; "
-        # "cp {input.config} ~/.ncbi/user-settings.mkfg || exit 1 ; "
         "fasterq-dump "
         "--outfile {wildcards.expt} "
         "--outdir {params.outdir} "
@@ -111,18 +106,6 @@ rule split_srafile:
         "--log-level 5 "
         "{input.url} "
         "&> {log} "
-
-
-# can't run this in a container, because it won't find the snakemake cache
-rule configure_sratools:
-    input:
-        workflow.source_path("config/user-settings.template.mkfg"),
-    output:
-        Path(run_tmpdir, "user-settings.mkfg"),
-    params:
-        run_tmpdir=run_tmpdir,
-    script:
-        "scripts/configure_sratools.py"
 
 
 checkpoint parse_run_xml:
