@@ -19,7 +19,11 @@ module bpdownload:
         # )
         "../modules/bpdownload/Snakefile"
     config:
-        {"accession": accession, "outdir": outdir}
+        {
+            "accession": accession,
+            "outdir": outdir,
+            "run_tmpdir": Path(outdir, "tmp"),
+        }
 
 
 use rule * from bpdownload
