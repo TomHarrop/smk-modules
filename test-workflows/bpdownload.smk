@@ -38,12 +38,11 @@ rule use_bpdownload_output:
 # Call the module.
 module bpdownload:
     snakefile:
-        # github(
-        #     "tomharrop/smk-modules",
-        #     path="modules/bpdownload/Snakefile",
-        #     tag="0.0.18",
-        # )
-        "../modules/bpdownload/Snakefile"
+        github(
+            "tomharrop/smk-modules",
+            path="modules/bpdownload/Snakefile",
+            tag="0.0.18",
+        )
     config:
         {
             "accession": accession,

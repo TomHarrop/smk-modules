@@ -20,7 +20,7 @@ def get_expt_url(wildcards):
         reader = csv.reader(open(csvfile))
         expt_to_url = dict(reader)
     my_url = expt_to_url[wildcards.expt]
-    logger.info(f"Snakemake is checking the url {my_url}")
+    logger.info(f"Snakemake is checking {my_url}")
     return {
         "url": HTTP.remote(my_url),
     }
@@ -96,7 +96,9 @@ except KeyError as e:
 # snakemake's downloader
 HTTP = HTTPRemoteProvider()
 
-logger.warning(f"Snakemake will check the remote files for {accession}. This can be quite slow.")
+logger.warning(
+    f"Snakemake will check the remote files for {accession}. This can be quite slow."
+)
 
 #########
 # RULES #
