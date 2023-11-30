@@ -127,7 +127,7 @@ rule repair:
         Path(logdir, "repair", "{LibraryName}.log"),
     threads: 1
     resources:
-        time=lambda wildcards, attempt: 10 * attempt,
+        time=lambda wildcards, attempt: 15 * (2**attempt),
         mem_mb=lambda wildcards, attempt: 4e3 * attempt,
     container:
         bbmap

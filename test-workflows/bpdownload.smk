@@ -41,7 +41,7 @@ module bpdownload:
         github(
             "tomharrop/smk-modules",
             path="modules/bpdownload/Snakefile",
-            tag="0.0.18",
+            tag="0.0.19",
         )
     config:
         {
