@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+
+from snakemake.logging import logger
+import tempfile
+
+
+#############
+# FUNCTIONS #
+#############
+
+
+def resolve_input(wildcards, input):
+    output_dict = {}
+    for key, value in input.items():
+        try:
+            output_dict[key] = Path(value).resolve()
+        except TypeError as e:
+            logger.debug(f"Not trying to resolve {key}")
+    return output_dict
+
+
+def resolve_output(wildcards, output):
+    output_dict = {}
+    for key, value in output.items():
+        try:
+            output_dict[key] = Path(value).resolve()
+        except TypeError as e:
+            logger.debug(f"Not trying to resolve {key}")
+    return output_dict
+
+
+###########
+# GLOBALS #
+###########
+
+logger.info("Paragone smk-module")
+
+# containers
+paragone = "paragone_1.0.0--pl5321h031d066_0.sif"  # FIXME
+pigz = "docker://quay.io/biocontainers/pigz:2.3.4"
+
+
+# catch input
+paralog_sequences = config["paralog_sequences"]
+external_outgroups = config["external_outgroups"]
+internal_outgroup = config["internal_outgroup"]
+
+logger.info(f"paralog_sequences {paralog_sequences}")
+logger.info(f"external_outgroups {external_outgroups}")
+logger.info(f"internal_outgroup {internal_outgroup}")
+
+# set up directories
+outdir = Path(config["outdir"] if "outdir" in config else ".")
+logger.info(f"outdir: {outdir}")
+logdir = Path(outdir, "logs")
+
+# set up a temporary directory for this run
+try:
+    run_tmpdir = config["run_tmpdir"]
+    logger.info(f"Caught run_tmpdir {run_tmpdir}")
+except KeyError as e:
+    logger.info(f"{e} not set in config")
+    run_tmpdir = tempfile.mkdtemp()
+    logger.info(f"Setting run_tmpdir to {run_tmpdir}")
+    logger.warning("This probably won't work on a cluster!")
+
+#########
+# RULES #
+#########
+
+
+rule target:
+    input:
+        # ask for the tar files, otherwise they will be removed
+        Path(outdir, "check_and_align.tar.gz"),
+
+
+rule check_and_align:
+    input:
+        paralog_sequences=paralog_sequences,
+        external_outgroups=external_outgroups,
+    output:
+        fasta=Path(outdir, "external_outgroups_sanitised.fasta"),
+        alignments=directory(Path(outdir, "04_alignments_trimmed_hmmcleaned")),
+        tarfile=temp(Path(run_tmpdir, "check_and_align.tar")),
+    params:
+        resolve_input,
+        resolve_output,
+        internal_outgroup=internal_outgroup,
+    log:
+        Path(logdir, "check_and_align.log").resolve(),
+    threads: workflow.cores
+    container:
+        paragone
+    shell:
+        "workdir=$( mktemp -d ) ; "
+        "cd $workdir || exit 1 ; "
+        "paragone "
+        "check_and_align {params[0][paralog_sequences]} "
+        "--external_outgroups_file {params[0][external_outgroups]} "
+        "--internal_outgroup {params.internal_outgroup} "
+        "--pool 1 "
+        "--threads {threads} "
+        "&> {log} "
+        "&& "
+        "mv external_outgroups_sanitised.fasta {params[1][fasta]} "
+        "&& "
+        "mv 04_alignments_trimmed_hmmcleaned {params[1][alignments]} "
+        "&& "
+        "tar -cf - . "
+        "> {params[1][tarfile]} "
+
+
+rule pigz:
+    input:
+        Path(run_tmpdir, "{file}.tar"),
+    output:
+        Path(outdir, "{file}.tar.gz"),
+    container:
+        pigz
+    threads: workflow.cores
+    shell:
+        "pigz -p {threads} -9 <{input} >{output}"
