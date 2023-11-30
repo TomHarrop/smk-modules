@@ -73,6 +73,72 @@ rule target:
     input:
         # ask for the tar files, otherwise they will be removed
         Path(outdir, "check_and_align.tar.gz"),
+        Path(outdir, "alignment_to_tree.tar.gz"),
+        Path(outdir, "qc_trees_and_extract_fasta.tar.gz"),
+
+
+rule qc_trees_and_extract_fasta:
+    input:
+        alignments=Path(outdir, "04_alignments_trimmed_hmmcleaned"),
+        trees=directory(Path(outdir, "05_trees_pre_quality_control")),
+    output:
+        sequences=directory(Path(outdir, "09_sequences_from_qc_trees")),
+        tarfile=temp(Path(run_tmpdir, "qc_trees_and_extract_fasta.tar")),
+    params:
+        resolve_input,
+        resolve_output,
+    log:
+        Path(logdir, "qc_trees_and_extract_fasta.log").resolve(),
+    threads: 1
+    container:
+        paragone
+    shell:
+        "workdir=$( mktemp -d ) ; "
+        "cd $workdir || exit 1 ; "
+        "ln -s {params[0][trees]} ./ ; "
+        "paragone "
+        "qc_trees_and_extract_fasta {params[0][alignments]} "
+        "--treeshrink_q_value 0.20 "
+        "--cut_deep_paralogs_internal_branch_length_cutoff 0.04 "
+        "&> {log} "
+        "&& "
+        "mv 09_sequences_from_qc_trees {params[1][sequences]} "
+        "&& "
+        "find . -maxdepth 1 -type l -delete "
+        "&& "
+        "tar -cf - . "
+        "> {params[1][tarfile]} "
+        
+
+
+rule alignment_to_tree:
+    input:
+        alignments=Path(outdir, "04_alignments_trimmed_hmmcleaned"),
+    output:
+        trees=directory(Path(outdir, "05_trees_pre_quality_control")),
+        tarfile=temp(Path(run_tmpdir, "alignment_to_tree.tar")),
+    params:
+        resolve_input,
+        resolve_output,
+    log:
+        Path(logdir, "alignment_to_tree.log").resolve(),
+    threads: workflow.cores
+    container:
+        paragone
+    shell:
+        "workdir=$( mktemp -d ) ; "
+        "cd $workdir || exit 1 ; "
+        "paragone "
+        "alignment_to_tree {params[0][alignments]} "
+        "--use_fasttree "
+        "--pool 1 "
+        "--threads {threads} "
+        "&> {log} "
+        "&& "
+        "mv 05_trees_pre_quality_control {params[1][trees]} "
+        "&& "
+        "tar -cf - . "
+        "> {params[1][tarfile]} "
 
 
 rule check_and_align:
