@@ -341,19 +341,25 @@ rule alignment_to_tree:
         "> {params[1][tarfile]} "
 
 
+check_and_align_ouput = {
+    "alignments": directory(Path(outdir, "04_alignments_trimmed_hmmcleaned")),
+    "taxon_list": Path(
+        outdir,
+        "00_logs_and_reports",
+        "reports",
+        "outgroup_taxon_list.tsv",
+    ),
+    "tarfile": temp(Path(run_tmpdir, "check_and_align.tar")),
+}
+
+check_and_align_ouput["fasta"] = Path(outdir, "external_outgroups_sanitised.fasta"),
+
+
 rule check_and_align:
     input:
         unpack(get_paragone_input),
     output:
-        # fasta=Path(outdir, "external_outgroups_sanitised.fasta"),
-        alignments=directory(Path(outdir, "04_alignments_trimmed_hmmcleaned")),
-        taxon_list=Path(
-            outdir,
-            "00_logs_and_reports",
-            "reports",
-            "outgroup_taxon_list.tsv",
-        ),
-        tarfile=temp(Path(run_tmpdir, "check_and_align.tar")),
+        check_and_align_ouput
     params:
         get_paragone_params,
         resolve_output,
@@ -372,7 +378,7 @@ rule check_and_align:
         "--pool " + str(pool) + " "
         "--threads {threads} "
         "&> {log} "
-        # "{params[0][collect_outgroups]} "
+
         "&& "
         "mv 04_alignments_trimmed_hmmcleaned {params[1][alignments]} "
         "&& "
@@ -381,6 +387,7 @@ rule check_and_align:
         "&& "
         "tar -cf - . "
         "> {params[1][tarfile]} "
+        # "{params[0][collect_outgroups]} "
 
 
 rule pigz:
