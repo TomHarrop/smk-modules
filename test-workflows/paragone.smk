@@ -3,6 +3,7 @@
 from pathlib import Path
 
 paralog_sequences = Path("test-data", "paragone", "paralog_input")
+# the external outgroups can be a target file with a known outgroup ID
 external_outgroups = Path("test-data", "paragone", "external_outgroups.fasta")
 internal_outgroup = "80974"  # taxon id?
 
