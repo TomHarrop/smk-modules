@@ -15,7 +15,7 @@ paragone_snakefile = "../modules/paragone/Snakefile"
 rule target:
     input:
         expand(
-            "test-output/paragone/{run}/final_alignments.tar.gz",
+            "test-output/paragone/{run}/intermediate_files.tar.gz",
             run=["internal", "external"],
         ),
 
@@ -29,6 +29,7 @@ module paragone_external:
             "paralog_sequences": paralog_sequences,
             "outdir": Path("test-output", "paragone", "external"),
             "pool": 3,
+            "run_tmpdir": Path("test-output", "paragone", "external_tmp"),
         }
 
 
@@ -44,6 +45,7 @@ module paragone_internal:
             "paralog_sequences": paralog_sequences,
             "outdir": Path("test-output", "paragone", "internal"),
             "pool": 3,
+            "run_tmpdir": Path("test-output", "paragone", "internal_tmp"),
         }
 
 
