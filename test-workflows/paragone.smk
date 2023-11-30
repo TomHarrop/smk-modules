@@ -8,22 +8,43 @@ external_outgroups = Path("test-data", "paragone", "external_outgroups.fasta")
 internal_outgroup = "80974"  # taxon id?
 
 
-module paragone:
+# paragone_snakefile = github()
+paragone_snakefile = "../modules/paragone/Snakefile"
+
+
+rule target:
+    input:
+        expand(
+            "test-output/paragone/{run}/final_alignments.tar.gz",
+            run=["internal", "external"],
+        ),
+
+
+module paragone_external:
     snakefile:
-        # github(
-        #     "tomharrop/smk-modules",
-        #     path="modules/hybpiper/Snakefile",
-        #     tag="0.0.17",
-        # )
-        "../modules/paragone/Snakefile"
+        paragone_snakefile
     config:
         {
             "external_outgroups": external_outgroups,
-            "internal_outgroup": internal_outgroup,
             "paralog_sequences": paralog_sequences,
-            "outdir": Path("test-output", "paragone"),
-            "pool": 3
+            "outdir": Path("test-output", "paragone", "external"),
+            "pool": 3,
         }
 
 
-use rule * from paragone
+use rule * from paragone_external as pgext_*
+
+
+module paragone_internal:
+    snakefile:
+        paragone_snakefile
+    config:
+        {
+            "internal_outgroup": internal_outgroup,
+            "paralog_sequences": paralog_sequences,
+            "outdir": Path("test-output", "paragone", "internal"),
+            "pool": 3,
+        }
+
+
+use rule * from paragone_internal as pgint_*

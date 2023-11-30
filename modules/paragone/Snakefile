@@ -29,6 +29,40 @@ def resolve_output(wildcards, output):
     return output_dict
 
 
+def get_paragone_input(wildcards):
+    input_dict = {"paralog_sequences": paralog_sequences}
+    try:
+        input_dict["external_outgroups"] = external_outgroups
+    except NameError:
+        pass
+    print(input_dict)
+    return input_dict
+
+
+def get_paragone_params(wildcards, input, output):
+    param_dict = {"paralog_sequences": Path(input.paralog_sequences).resolve()}
+    try:
+        eo_path = Path(input.external_outgroups).resolve()
+        of_path = Path(output.fasta).resolve()
+        param_dict[
+            "external_outgroups"
+        ] = f"--external_outgroups_file {eo_path} "
+        param_dict[
+            "collect_outgroups"
+        ] = f"&& mv external_outgroups_sanitised.fasta {of_path} "
+    except AttributeError:
+        param_dict["external_outgroups"] = ""
+        param_dict["collect_outgroups"] = ""
+    try:
+        param_dict[
+            "internal_outgroup"
+        ] = f"--internal_outgroup {internal_outgroup} "
+    except NameError:
+        param_dict["internal_outgroup"] = ""
+    print(param_dict)
+    return param_dict
+
+
 ###########
 # GLOBALS #
 ###########
@@ -39,17 +73,28 @@ logger.info("Paragone smk-module")
 paragone = "paragone_1.0.0--pl5321h031d066_0.sif"  # FIXME
 pigz = "docker://quay.io/biocontainers/pigz:2.3.4"
 
-
 # catch input
 paralog_sequences = config["paralog_sequences"]
-external_outgroups = config["external_outgroups"]
-internal_outgroup = config["internal_outgroup"]
-pool = config["pool"]
-
 logger.info(f"paralog_sequences {paralog_sequences}")
-logger.info(f"external_outgroups {external_outgroups}")
-logger.info(f"internal_outgroup {internal_outgroup}")
-logger.info(f"pool {pool}")
+
+try:
+    external_outgroups = config["external_outgroups"]
+    logger.info(f"external_outgroups {external_outgroups}")
+except KeyError as e:
+    logger.warning("external_outgroups not set")
+
+try:
+    internal_outgroup = config["internal_outgroup"]
+    logger.info(f"internal_outgroup {internal_outgroup}")
+except KeyError as e:
+    logger.warning("internal_outgroup not set")
+
+try:
+    pool = config["pool"]
+    logger.info(f"pool {pool}")
+except KeyError as e:
+    logger.warning("pool not set, using 1")
+    pool = 1
 
 # set up directories
 outdir = Path(config["outdir"] if "outdir" in config else ".")
@@ -298,10 +343,9 @@ rule alignment_to_tree:
 
 rule check_and_align:
     input:
-        paralog_sequences=paralog_sequences,
-        external_outgroups=external_outgroups,
+        unpack(get_paragone_input),
     output:
-        fasta=Path(outdir, "external_outgroups_sanitised.fasta"),
+        # fasta=Path(outdir, "external_outgroups_sanitised.fasta"),
         alignments=directory(Path(outdir, "04_alignments_trimmed_hmmcleaned")),
         taxon_list=Path(
             outdir,
@@ -311,9 +355,8 @@ rule check_and_align:
         ),
         tarfile=temp(Path(run_tmpdir, "check_and_align.tar")),
     params:
-        resolve_input,
+        get_paragone_params,
         resolve_output,
-        internal_outgroup=internal_outgroup,
     log:
         Path(logdir, "check_and_align.log").resolve(),
     threads: workflow.cores // pool
@@ -324,13 +367,12 @@ rule check_and_align:
         "cd $workdir || exit 1 ; "
         "paragone "
         "check_and_align {params[0][paralog_sequences]} "
-        "--external_outgroups_file {params[0][external_outgroups]} "
-        "--internal_outgroup {params.internal_outgroup} "
+        "{params[0][external_outgroups]} "
+        "{params[0][internal_outgroup]} "
         "--pool " + str(pool) + " "
         "--threads {threads} "
         "&> {log} "
-        "&& "
-        "mv external_outgroups_sanitised.fasta {params[1][fasta]} "
+        # "{params[0][collect_outgroups]} "
         "&& "
         "mv 04_alignments_trimmed_hmmcleaned {params[1][alignments]} "
         "&& "
