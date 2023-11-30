@@ -44,10 +44,12 @@ pigz = "docker://quay.io/biocontainers/pigz:2.3.4"
 paralog_sequences = config["paralog_sequences"]
 external_outgroups = config["external_outgroups"]
 internal_outgroup = config["internal_outgroup"]
+pool = config["pool"]
 
 logger.info(f"paralog_sequences {paralog_sequences}")
 logger.info(f"external_outgroups {external_outgroups}")
 logger.info(f"internal_outgroup {internal_outgroup}")
+logger.info(f"pool {pool}")
 
 # set up directories
 outdir = Path(config["outdir"] if "outdir" in config else ".")
@@ -75,12 +77,166 @@ rule target:
         Path(outdir, "check_and_align.tar.gz"),
         Path(outdir, "alignment_to_tree.tar.gz"),
         Path(outdir, "qc_trees_and_extract_fasta.tar.gz"),
+        Path(outdir, "align_selected_and_tree.tar.gz"),
+        Path(outdir, "prune_paralogs.tar.gz"),
+        Path(outdir, "final_alignments.tar.gz"),
+
+
+rule final_alignments:
+    input:
+        mo=Path(outdir, "14_pruned_MO"),
+        mi=Path(outdir, "15_pruned_MI"),
+        rt=Path(outdir, "16_pruned_RT"),
+        alignments=Path(outdir, "11_pre_paralog_resolution_alignments"),
+    output:
+        tarfile=temp(Path(run_tmpdir, "final_alignments.tar")),
+        mo=directory(Path(outdir, "26_MO_final_alignments_trimmed")),
+        mi=directory(Path(outdir, "27_MI_final_alignments_trimmed")),
+        rt=directory(Path(outdir, "28_RT_final_alignments_trimmed")),
+    params:
+        resolve_input,
+        resolve_output,
+    log:
+        Path(logdir, "final_alignments.log").resolve(),
+    threads: workflow.cores // pool
+    container:
+        paragone
+    shell:
+        "workdir=$( mktemp -d ) ; "
+        "cd $workdir || exit 1 ; "
+        "ln -s {params[0][mo]} ./ ; "
+        "ln -s {params[0][mi]} ./ ; "
+        "ln -s {params[0][rt]} ./ ; "
+        "ln -s {params[0][alignments]} ./ ; "
+        "paragone final_alignments "
+        "--mo --rt --mi "
+        "--pool " + str(pool) + " "
+        "--threads {threads} "
+        "--keep_intermediate_files "
+        "&> {log} "
+        "&& "
+        "mv 26_MO_final_alignments_trimmed {params[1][mo]} "
+        "&& "
+        "mv 27_MI_final_alignments_trimmed {params[1][mi]} "
+        "&& "
+        "mv 28_RT_final_alignments_trimmed {params[1][rt]} "
+        "&& "
+        "find . -maxdepth 1 -type l -delete "
+        "&& "
+        "tar -cf - . "
+        "> {params[1][tarfile]} "
+
+
+rule prune_paralogs:
+    input:
+        trees=Path(outdir, "13_pre_paralog_resolution_trees"),
+        groups_list=Path(
+            outdir,
+            "00_logs_and_reports",
+            "reports",
+            "in_and_outgroups_list.tsv",
+        ),
+    output:
+        tarfile=temp(Path(run_tmpdir, "prune_paralogs.tar")),
+        mo=directory(Path(outdir, "14_pruned_MO")),
+        mi=directory(Path(outdir, "15_pruned_MI")),
+        rt=directory(Path(outdir, "16_pruned_RT")),
+    params:
+        resolve_input,
+        resolve_output,
+        reports_path=lambda wildcards, input: Path(input.groups_list)
+        .resolve()
+        .parent.parent,
+    log:
+        Path(logdir, "prune_paralogs.log").resolve(),
+    threads: 1
+    container:
+        paragone
+    shell:
+        "workdir=$( mktemp -d ) ; "
+        "cd $workdir || exit 1 ; "
+        "ln -s {params.reports_path} ./ ; "
+        "ln -s {params[0][trees]} ./ ; "
+        "paragone "
+        "prune_paralogs "
+        "--mo --rt --mi "
+        "&> {log} "
+        "&& "
+        "mv 14_pruned_MO {params[1][mo]} "
+        "&& "
+        "mv 15_pruned_MI {params[1][mi]} "
+        "&& "
+        "mv 16_pruned_RT {params[1][rt]} "
+        "&& "
+        "find . -maxdepth 1 -type l -delete "
+        "&& "
+        "tar -cf - . "
+        "> {params[1][tarfile]} "
+
+
+rule align_selected_and_tree:
+    input:
+        sequences=Path(outdir, "09_sequences_from_qc_trees"),
+        alignments=Path(outdir, "04_alignments_trimmed_hmmcleaned"),
+        taxon_list=Path(
+            outdir,
+            "00_logs_and_reports",
+            "reports",
+            "outgroup_taxon_list.tsv",
+        ),
+    output:
+        trees=directory(Path(outdir, "13_pre_paralog_resolution_trees")),
+        alignments=directory(
+            Path(outdir, "11_pre_paralog_resolution_alignments")
+        ),
+        tarfile=temp(Path(run_tmpdir, "align_selected_and_tree.tar")),
+        groups_list=Path(
+            outdir,
+            "00_logs_and_reports",
+            "reports",
+            "in_and_outgroups_list.tsv",
+        ),
+    params:
+        resolve_input,
+        resolve_output,
+        reports_path=lambda wildcards, input: Path(input.taxon_list)
+        .resolve()
+        .parent.parent,
+    log:
+        Path(logdir, "align_selected_and_tree.log").resolve(),
+    threads: workflow.cores // pool
+    container:
+        paragone
+    shell:
+        "workdir=$( mktemp -d ) ; "
+        "cd $workdir || exit 1 ; "
+        "ln -s {params[0][sequences]} ./ ; "
+        "ln -s {params.reports_path} ./ ; "
+        "paragone "
+        "align_selected_and_tree "
+        "{params[0][alignments]} "
+        "--use_fasttree "
+        "--pool " + str(pool) + " "
+        "--threads {threads} "
+        "&> {log} "
+        "&& "
+        "mv 13_pre_paralog_resolution_trees {params[1][trees]} "
+        "&& "
+        "mv 11_pre_paralog_resolution_alignments {params[1][alignments]} "
+        "&& "
+        "mv 00_logs_and_reports/reports/in_and_outgroups_list.tsv "
+        "{params[1][groups_list]} "
+        "&& "
+        "find . -maxdepth 1 -type l -delete "
+        "&& "
+        "tar -cf - . "
+        "> {params[1][tarfile]} "
 
 
 rule qc_trees_and_extract_fasta:
     input:
         alignments=Path(outdir, "04_alignments_trimmed_hmmcleaned"),
-        trees=directory(Path(outdir, "05_trees_pre_quality_control")),
+        trees=Path(outdir, "05_trees_pre_quality_control"),
     output:
         sequences=directory(Path(outdir, "09_sequences_from_qc_trees")),
         tarfile=temp(Path(run_tmpdir, "qc_trees_and_extract_fasta.tar")),
@@ -108,7 +264,6 @@ rule qc_trees_and_extract_fasta:
         "&& "
         "tar -cf - . "
         "> {params[1][tarfile]} "
-        
 
 
 rule alignment_to_tree:
@@ -122,7 +277,7 @@ rule alignment_to_tree:
         resolve_output,
     log:
         Path(logdir, "alignment_to_tree.log").resolve(),
-    threads: workflow.cores
+    threads: workflow.cores // pool
     container:
         paragone
     shell:
@@ -131,7 +286,7 @@ rule alignment_to_tree:
         "paragone "
         "alignment_to_tree {params[0][alignments]} "
         "--use_fasttree "
-        "--pool 1 "
+        "--pool " + str(pool) + " "
         "--threads {threads} "
         "&> {log} "
         "&& "
@@ -148,6 +303,12 @@ rule check_and_align:
     output:
         fasta=Path(outdir, "external_outgroups_sanitised.fasta"),
         alignments=directory(Path(outdir, "04_alignments_trimmed_hmmcleaned")),
+        taxon_list=Path(
+            outdir,
+            "00_logs_and_reports",
+            "reports",
+            "outgroup_taxon_list.tsv",
+        ),
         tarfile=temp(Path(run_tmpdir, "check_and_align.tar")),
     params:
         resolve_input,
@@ -155,7 +316,7 @@ rule check_and_align:
         internal_outgroup=internal_outgroup,
     log:
         Path(logdir, "check_and_align.log").resolve(),
-    threads: workflow.cores
+    threads: workflow.cores // pool
     container:
         paragone
     shell:
@@ -165,13 +326,16 @@ rule check_and_align:
         "check_and_align {params[0][paralog_sequences]} "
         "--external_outgroups_file {params[0][external_outgroups]} "
         "--internal_outgroup {params.internal_outgroup} "
-        "--pool 1 "
+        "--pool " + str(pool) + " "
         "--threads {threads} "
         "&> {log} "
         "&& "
         "mv external_outgroups_sanitised.fasta {params[1][fasta]} "
         "&& "
         "mv 04_alignments_trimmed_hmmcleaned {params[1][alignments]} "
+        "&& "
+        "mv 00_logs_and_reports/reports/outgroup_taxon_list.tsv "
+        "{params[1][taxon_list]} "
         "&& "
         "tar -cf - . "
         "> {params[1][tarfile]} "

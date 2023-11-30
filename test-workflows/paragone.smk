@@ -20,7 +20,8 @@ module paragone:
             "external_outgroups": external_outgroups,
             "internal_outgroup": internal_outgroup,
             "paralog_sequences": paralog_sequences,
-            "outdir": Path("test-output", "paragone")
+            "outdir": Path("test-output", "paragone"),
+            "pool": 3
         }
 
 
