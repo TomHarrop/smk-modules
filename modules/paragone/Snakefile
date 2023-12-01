@@ -126,6 +126,9 @@ rule collect_paragone_intermediate_files:
     container:
         pigz
     threads: workflow.cores
+    resources:
+        mem_mb=lambda wildcards, attempt: 8e3 * attempt,
+        time=lambda wildcards, attempt: 10 * attempt,
     shell:
         "tar --directory {params.wd} -cv . "
         "2> {log} "
@@ -139,6 +142,9 @@ rule collect_alignments:
         directory(Path(outdir, "{alignment}")),
     container:
         pigz
+    resources:
+        mem_mb=lambda wildcards, attempt: 8e3 * attempt,
+        time=lambda wildcards, attempt: 10 * attempt,
     shell:
         "mv {input} {output}"
 
@@ -163,9 +169,13 @@ rule final_alignments:
         ),
     params:
         wd=Path(paragone_directory).resolve(),
+        threads=lambda wildcards, threads: threads // pool,
     log:
         Path(logdir, "final_alignments.log").resolve(),
-    threads: workflow.cores // pool
+    threads: workflow.cores
+    resources:
+        mem_mb=lambda wildcards, attempt: 8e3 * attempt,
+        time=lambda wildcards, attempt: 30 * attempt,
     container:
         paragone
     shell:
@@ -173,7 +183,7 @@ rule final_alignments:
         "paragone final_alignments "
         "--mo --rt --mi "
         "--pool " + str(pool) + " "
-        "--threads {threads} "
+        "--threads {params.threads} "
         "--keep_intermediate_files "
         "&> {log} "
 
@@ -196,6 +206,9 @@ rule prune_paralogs:
     log:
         Path(logdir, "prune_paralogs.log").resolve(),
     threads: 1
+    resources:
+        mem_mb=lambda wildcards, attempt: 8e3 * attempt,
+        time=lambda wildcards, attempt: 30 * attempt,
     container:
         paragone
     shell:
@@ -231,9 +244,13 @@ rule align_selected_and_tree:
         ),
     params:
         wd=Path(paragone_directory).resolve(),
+        threads=lambda wildcards, threads: threads // pool,
     log:
         Path(logdir, "align_selected_and_tree.log").resolve(),
-    threads: workflow.cores // pool
+    threads: workflow.cores
+    resources:
+        mem_mb=lambda wildcards, attempt: 8e3 * attempt,
+        time=lambda wildcards, attempt: 30 * attempt,
     container:
         paragone
     shell:
@@ -242,7 +259,7 @@ rule align_selected_and_tree:
         "align_selected_and_tree 04_alignments_trimmed_hmmcleaned "
         "--use_fasttree "
         "--pool " + str(pool) + " "
-        "--threads {threads} "
+        "--threads {params.threads} "
         "&> {log} "
 
 
@@ -259,6 +276,9 @@ rule qc_trees_and_extract_fasta:
     log:
         Path(logdir, "qc_trees_and_extract_fasta.log").resolve(),
     threads: 1
+    resources:
+        mem_mb=lambda wildcards, attempt: 8e3 * attempt,
+        time=lambda wildcards, attempt: 30 * attempt,
     container:
         paragone
     shell:
@@ -279,9 +299,13 @@ rule alignment_to_tree:
         ),
     params:
         wd=Path(paragone_directory).resolve(),
+        threads=lambda wildcards, threads: threads // pool,
     log:
         Path(logdir, "alignment_to_tree.log").resolve(),
-    threads: workflow.cores // pool
+    threads: workflow.cores
+    resources:
+        mem_mb=lambda wildcards, attempt: 8e3 * attempt,
+        time=lambda wildcards, attempt: 30 * attempt,
     container:
         paragone
     shell:
@@ -290,7 +314,7 @@ rule alignment_to_tree:
         "alignment_to_tree 04_alignments_trimmed_hmmcleaned "
         "--use_fasttree "
         "--pool " + str(pool) + " "
-        "--threads {threads} "
+        "--threads {params.threads} "
         "&> {log} "
 
 
@@ -310,9 +334,13 @@ rule check_and_align:
     params:
         get_paragone_params,
         wd=Path(paragone_directory).resolve(),
+        threads=lambda wildcards, threads: threads // pool,
     log:
         Path(logdir, "check_and_align.log").resolve(),
-    threads: workflow.cores // pool
+    threads: workflow.cores
+    resources:
+        mem_mb=lambda wildcards, attempt: 8e3 * attempt,
+        time=lambda wildcards, attempt: 30 * attempt,
     container:
         paragone
     shell:
@@ -322,5 +350,5 @@ rule check_and_align:
         "{params[0][external_outgroups]} "
         "{params[0][internal_outgroup]} "
         "--pool " + str(pool) + " "
-        "--threads {threads} "
+        "--threads {params.threads} "
         "&> {log} "
