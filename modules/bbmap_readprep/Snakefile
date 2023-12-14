@@ -2,17 +2,6 @@
 
 from snakemake.logging import logger
 from pathlib import Path
-import re
-
-
-def check_sample_name(sample_name):
-    if re.compile("[^a-zA-Z0-9_]").search(sample_name):
-        raise ValueError(f"{sample_name} contains special character(s)")
-
-
-def get_sample_reads(wildcards):
-    return sample_dict[wildcards.sample]
-
 
 ###########
 # GLOBALS #
@@ -29,14 +18,8 @@ logdir = Path(outdir, "logs")
 # catch input
 adaptors = config["adaptors"]
 logger.info(f"bbmap_readprep: trimming adaptors from {adaptors}")
-
-sample_dict = config["samples"]
-logger.info("bbmap_readprep: caught sample_dict")
-logger.info(f"bbmap_readprep: {sample_dict}")
-all_samples = sorted(set(sample_dict.keys()))
-for sample in all_samples:
-    check_sample_name(sample)
-    logger.info(f"Sample name {sample} seems OK")
+reads_directory = config["reads_directory"]
+logger.info(f"bbmap_readprep: using input fastq files from {reads_directory}")
 
 #########
 # RULES #
@@ -46,8 +29,7 @@ for sample in all_samples:
 rule target:
     input:
         expand(
-            Path(outdir, "{sample}.{readset}.fastq.gz"),
-            sample=all_samples,
+            Path(outdir, "{{sample}}.{readset}.fastq.gz"),
             readset=["r1", "r2", "unpaired"],
         ),
 
@@ -89,7 +71,8 @@ rule trim:
 # double check pairing
 rule repair:
     input:
-        unpack(get_sample_reads),
+        r1=Path(reads_directory, "{sample}.r1.fastq.gz"),
+        r2=Path(reads_directory, "{sample}.r2.fastq.gz"),
     output:
         pipe(Path(outdir, "{sample}.repair.fastq")),
     log:
@@ -111,3 +94,14 @@ rule repair:
         "tossjunk=t "
         ">> {output} "
         "2> {log}"
+
+
+rule collect_input:
+    input:
+        Path(reads_directory, "{sample}.r{r}.fq.gz")
+    output:
+        Path(reads_directory, "{sample}.r{r}.fastq.gz")
+    handover:
+        True
+    shell:
+        "ln -s $(readlink -f {input}) $(readlink -f {output})"

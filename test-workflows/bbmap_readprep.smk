@@ -10,27 +10,27 @@ test_outdir = Path("test-output", "bbmap_readprep")
 bbmap_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/bbmap_readprep/Snakefile",
-    tag="0.0.24",
+    tag="0.0.25",
 )
 
-# outer keys are sample names, inner keys must be r1 and r2
-sample_dict = {
-    "GSM461177": {
-        "r1": Path(test_data, "GSM461177_subsampled.r1.fq.gz"),
-        "r2": Path(test_data, "GSM461177_subsampled.r2.fq.gz"),
-    },
-    "GSM461180": {
-        "r1": Path(test_data, "GSM461180_subsampled.r1.fq.gz"),
-        "r2": Path(test_data, "GSM461180_subsampled.r2.fq.gz"),
-    },
-}
+rule target:
+    input:
+        expand(
+            Path(test_outdir, "{sample}.{readset}.fastq.gz"),
+            sample=["GSM461177_subsampled","GSM461180_subsampled"],
+            readset=["r1", "r2"] # can also ask for unpaired
 
+        )
 
 module bbmap_readprep:
     snakefile:
         bbmap_snakefile
     config:
-        {"outdir": test_outdir, "samples": sample_dict, "adaptors": adaptors}
+        {
+            "outdir": test_outdir,
+            "reads_directory": test_data,
+            "adaptors": adaptors,
+        }
 
 
 use rule * from bbmap_readprep as bbmap_readprep_*
