@@ -100,9 +100,9 @@ rule repair:
 
 rule collect_input:
     input:
-        Path(reads_directory, "{sample}.r{r}.fq.gz")
+        Path(reads_directory, "{sample}.r{r}.fq.gz"),
     output:
-        Path(reads_directory, "{sample}.r{r}.fastq.gz")
+        Path(reads_directory, "{sample}.r{r}.fastq.gz"),
     container:
         bbmap
     shell:
