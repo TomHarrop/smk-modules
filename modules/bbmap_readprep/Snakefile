@@ -81,6 +81,8 @@ rule repair:
     resources:
         time=lambda wildcards, attempt: 10 * attempt,
         mem_mb=lambda wildcards, attempt: 4e3 * attempt,
+    container:
+        bbmap
     shell:
         "repair.sh "
         "-Xmx{resources.mem_mb}m "
@@ -101,7 +103,7 @@ rule collect_input:
         Path(reads_directory, "{sample}.r{r}.fq.gz")
     output:
         Path(reads_directory, "{sample}.r{r}.fastq.gz")
-    handover:
-        True
+    container:
+        bbmap
     shell:
         "ln -s $(readlink -f {input}) $(readlink -f {output})"
