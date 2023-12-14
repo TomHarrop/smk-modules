@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+
+from snakemake.logging import logger
+from pathlib import Path
+import re
+
+
+def check_sample_name(sample_name):
+    if re.compile("[^a-zA-Z0-9_]").search(sample_name):
+        raise ValueError(f"{sample_name} contains special character(s)")
+
+
+def get_sample_reads(wildcards):
+    return sample_dict[wildcards.sample]
+
+
+###########
+# GLOBALS #
+###########
+
+# containers
+bbmap = "docker://quay.io/biocontainers/bbmap:39.01--h92535d8_1"
+
+# set up directories
+outdir = Path(config["outdir"] if "outdir" in config else ".")
+logger.debug(f"outdir: {outdir}")
+logdir = Path(outdir, "logs")
+
+# catch input
+adaptors = config["adaptors"]
+logger.info(f"bbmap_readprep: trimming adaptors from {adaptors}")
+
+sample_dict = config["samples"]
+logger.info("bbmap_readprep: caught sample_dict")
+logger.info(f"bbmap_readprep: {sample_dict}")
+all_samples = sorted(set(sample_dict.keys()))
+for sample in all_samples:
+    check_sample_name(sample)
+    logger.info(f"Sample name {sample} seems OK")
+
+#########
+# RULES #
+#########
+
+
+rule target:
+    input:
+        expand(
+            Path(outdir, "{sample}.{readset}.fastq.gz"),
+            sample=all_samples,
+            readset=["r1", "r2", "unpaired"],
+        ),
+
+
+rule trim:
+    input:
+        pipe=Path(outdir, "{sample}.repair.fastq"),
+        adaptors=adaptors,
+    output:
+        r1=Path(outdir, "{sample}.r1.fastq.gz"),
+        r2=Path(outdir, "{sample}.r2.fastq.gz"),
+        unpaired=Path(outdir, "{sample}.unpaired.fastq.gz"),
+    log:
+        log=Path(logdir, "trim", "{sample}.log"),
+        stats=Path(logdir, "{sample}.stats.txt"),
+    threads: 2
+    resources:
+        time=lambda wildcards, attempt: 10 * attempt,
+        mem_mb=lambda wildcards, attempt: 2e3 * attempt,
+    container:
+        bbmap
+    shell:
+        "bbduk.sh "
+        "-Xmx{resources.mem_mb}m "
+        "forcetrimmod=5 "
+        "in={input.pipe} "
+        "int=t "
+        "ktrim=r k=23 mink=11 hdist=1 tpe tbo "
+        "out={output.r1} "
+        "out2={output.r2} "
+        "outs={output.unpaired} "
+        "ref={input.adaptors} "
+        "stats={log.stats} "
+        "threads={threads} "
+        "zl=9 "
+        "2> {log.log} "
+
+
+# double check pairing
+rule repair:
+    input:
+        unpack(get_sample_reads),
+    output:
+        pipe(Path(outdir, "{sample}.repair.fastq")),
+    log:
+        Path(logdir, "repair", "{sample}.log"),
+    threads: 1
+    resources:
+        time=lambda wildcards, attempt: 10 * attempt,
+        mem_mb=lambda wildcards, attempt: 4e3 * attempt,
+    shell:
+        "repair.sh "
+        "-Xmx{resources.mem_mb}m "
+        "-Xms100m "
+        "in={input.r1} "
+        "in2={input.r2} "
+        "out=stdout.fastq "
+        "outs=/dev/null "
+        "repair=t "
+        "tossbrokenreads=t "
+        "tossjunk=t "
+        ">> {output} "
+        "2> {log}"

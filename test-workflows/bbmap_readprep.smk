@@ -3,18 +3,15 @@
 from pathlib import Path
 
 test_data = Path("test-data", "star")
-test_outdir = Path("test-output", "star")
+adaptors = Path("test-data", "bbmap_readprep", "bbmap_39.01_adaptors.fa")
+test_outdir = Path("test-output", "bbmap_readprep")
 
-reference = Path(test_data, "NT_033779.5.fna.gz")
-annotation = Path(test_data, "NT_033779.5.gff.gz")
-
-# star_snakefile = "../modules/star/Snakefile"
-star_snakefile = github(
+# bbmap_snakefile = "../modules/bbmap_readprep/Snakefile"
+bbmap_snakefile = github(
     "tomharrop/smk-modules",
-    path="modules/star/Snakefile",
+    path="modules/bbmap_readprep/Snakefile",
     tag="0.0.24",
 )
-
 
 # outer keys are sample names, inner keys must be r1 and r2
 sample_dict = {
@@ -29,17 +26,11 @@ sample_dict = {
 }
 
 
-module star:
+module bbmap_readprep:
     snakefile:
-        star_snakefile
+        bbmap_snakefile
     config:
-        {
-            "reference": reference,
-            "annotation": annotation,
-            "outdir": test_outdir,
-            "run_tmpdir": Path(test_outdir, "tmp"),
-            "samples": sample_dict,
-        }
+        {"outdir": test_outdir, "samples": sample_dict, "adaptors": adaptors}
 
 
-use rule * from star as star_*
+use rule * from bbmap_readprep as bbmap_readprep_*
