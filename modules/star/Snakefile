@@ -1,0 +1,276 @@
+#!/usr/bin/env python3
+
+from snakemake.logging import logger
+from pathlib import Path
+import re
+
+
+def check_sample_name(sample_name):
+    if re.compile("[^a-zA-Z0-9_]").search(sample_name):
+        raise ValueError(f"{sample_name} contains special character(s)")
+
+
+def get_ref(wildcards):
+    if wildcards.index_file == "ref.fna":
+        return reference
+    elif wildcards.index_file == "ref.gff":
+        return annotation
+    else:
+        raise ValueError(f"WTF {wildcards.index_file}")
+
+
+def get_sample_reads(wildcards):
+    return sample_dict[wildcards.sample][wildcards.r]
+
+
+def make_star_prefix(wildcards, output):
+    # this should work as long as there are no special characters
+    output_path = output[0]
+    logger.debug(f"Guessing prefix from first output: {output_path}")
+    my_prefix = str(output_path).replace(
+        "".join(Path(output_path).suffixes), "."
+    )
+    logger.debug(f"Using prefix {my_prefix}")
+    return my_prefix
+
+
+###########
+# GLOBALS #
+###########
+
+# containers
+pigz = "docker://quay.io/biocontainers/pigz:2.3.4"
+star = "docker://quay.io/biocontainers/star:2.7.11a--h0033a41_0"
+
+# set up directories
+outdir = Path(config["outdir"] if "outdir" in config else ".")
+logger.debug(f"outdir: {outdir}")
+logdir = Path(outdir, "logs")
+benchdir = Path(logdir, "benchmarks")
+
+# set up a temporary directory for this run
+try:
+    run_tmpdir = config["run_tmpdir"]
+    logger.info(f"Caught run_tmpdir {run_tmpdir}")
+except KeyError as e:
+    logger.info(f"{e} not set in config")
+    run_tmpdir = tempfile.mkdtemp()
+    logger.info(f"Setting run_tmpdir to {run_tmpdir}")
+    logger.warning("This probably won't work on a cluster!")
+
+# catch input
+reference = config["reference"]
+logger.info(f"star: reference genome {reference}")
+annotation = config["annotation"]
+logger.info(f"star: reference annotation {annotation}")
+
+sample_dict = config["samples"]
+logger.info("star: caught sample_dict")
+logger.debug(f"star: {sample_dict}")
+all_samples = sorted(set(sample_dict.keys()))
+for sample in all_samples:
+    check_sample_name(sample)
+    logger.info(f"Sample name {sample} seems OK")
+
+
+# specify outputs
+star_outputs = ["Aligned.sortedByCoord.out.bam", "ReadsPerGene.out.tab"]
+
+#########
+# RULES #
+#########
+
+
+wildcard_constraints:
+    sample="|".join([re.escape(x) for x in all_samples]),
+    star_output="|".join([re.escape(x) for x in star_outputs]),
+
+
+rule target:
+    input:
+        expand(
+            Path(outdir, "{sample}", "{star_output}"),
+            sample=all_samples,
+            star_output=star_outputs,
+        ),
+        expand(
+            Path(outdir, "{sample}", "unmapped.r{r}.fastq.gz"),
+            sample=all_samples,
+            r=[1, 2],
+        ),
+
+
+rule collect_unmapped:
+    input:
+        Path(outdir, "second_pass", "{sample}.Unmapped.out.mate{r}"),
+    output:
+        Path(outdir, "{sample}", "unmapped.r{r}.fastq.gz"),
+    log:
+        Path(logdir, "collect_unmapped.{sample}.r{r}.log"),
+    threads: lambda wildcards, attempt: 6 * attempt
+    resources:
+        mem_mb=lambda wildcards, attempt: 2e3 * attempt,
+        time=lambda wildcards, attempt: 10 * attempt,
+    container:
+        pigz
+    shell:
+        "pigz -p {threads} < {input} > {output} 2> {log}"
+
+
+rule collect_output:
+    input:
+        Path(outdir, "second_pass", "{sample}.{star_output}"),
+    output:
+        Path(outdir, "{sample}", "{star_output}"),
+    shell:
+        "mv {input} {output}"
+
+
+rule second_pass:
+    input:
+        r1=Path(run_tmpdir, "reads", "{sample}.r1.fastq"),
+        r2=Path(run_tmpdir, "reads", "{sample}.r2.fastq"),
+        sa=Path(run_tmpdir, "index", "SA"),
+        junctions=expand(
+            Path(outdir, "first_pass", "{sample}.SJ.out.tab"),
+            sample=all_samples,
+        ),
+    output:
+        bam=Path(
+            outdir, "second_pass", "{sample}.Aligned.sortedByCoord.out.bam"
+        ),
+        counts=Path(outdir, "second_pass", "{sample}.ReadsPerGene.out.tab"),
+        unmapped=temp(
+            expand(
+                Path(
+                    outdir, "second_pass", "{{sample}}.Unmapped.out.mate{r}"
+                ),
+                r=[1, 2],
+            )
+        ),
+    params:
+        index=lambda wildcards, input: Path(input.sa).parent,
+        prefix=make_star_prefix,
+    log:
+        Path(logdir, "second_pass.{sample}.log"),
+    benchmark:
+        Path(benchdir, "second_pass.{sample}.txt")
+    threads: lambda wildcards, attempt: 6 * attempt
+    resources:
+        time=lambda wildcards, attempt: 30 * attempt,
+        mem_mb=lambda wildcards, attempt: 8e3 * attempt,
+    container:
+        star
+    shell:
+        "STAR "
+        "--genomeDir {params.index} "
+        "--outFileNamePrefix {params.prefix} "
+        "--outReadsUnmapped Fastx "
+        "--outSAMattrRGline ID:{wildcards.sample} "
+        "--outSAMtype BAM SortedByCoordinate "
+        "--outSAMunmapped None "
+        "--quantMode GeneCounts "
+        "--readFilesIn {input.r1} {input.r2} "
+        "--runThreadN {threads} "
+        "--sjdbFileChrStartEnd {input.junctions} "
+        "&> {log}"
+
+
+rule first_pass:
+    input:
+        r1=Path(run_tmpdir, "reads", "{sample}.r1.fastq"),
+        r2=Path(run_tmpdir, "reads", "{sample}.r2.fastq"),
+        sa=Path(run_tmpdir, "index", "SA"),
+    output:
+        sjdb=Path(outdir, "first_pass", "{sample}.SJ.out.tab"),
+    params:
+        index=lambda wildcards, input: Path(input.sa).parent,
+        prefix=make_star_prefix,
+    log:
+        Path(logdir, "first_pass.{sample}.log"),
+    benchmark:
+        Path(benchdir, "first_pass.{sample}.txt")
+    threads: lambda wildcards, attempt: 6 * attempt
+    resources:
+        time=lambda wildcards, attempt: 30 * attempt,
+        mem_mb=lambda wildcards, attempt: 8e3 * attempt,
+    container:
+        star
+    shell:
+        "STAR "
+        "--genomeDir {params.index} "
+        "--outFileNamePrefix {params.prefix} "
+        "--outSAMtype None "
+        "--outSJfilterReads Unique "
+        "--readFilesIn {input.r1} {input.r2} "
+        "--runThreadN {threads} "
+        "&> {log}"
+
+
+rule index_reference:
+    input:
+        reference=Path(run_tmpdir, "index", "ref.fna"),
+        annotation=Path(run_tmpdir, "index", "ref.gff"),
+    output:
+        sa=Path(run_tmpdir, "index", "SA"),
+    params:
+        index=lambda wildcards, output: Path(output.sa).parent,
+    log:
+        Path(logdir, "index_reference.log"),
+    benchmark:
+        Path(benchdir, "index_reference.txt")
+    threads: lambda wildcards, attempt: 10 * attempt
+    resources:
+        time=lambda wildcards, attempt: 30 * attempt,
+        mem_mb=lambda wildcards, attempt: 8e3 * attempt,
+    container:
+        star
+    shell:
+        "STAR "
+        "--runThreadN {threads} "
+        "--runMode genomeGenerate "
+        "--genomeDir {params.index} "
+        "--genomeFastaFiles {input.reference} "
+        "--sjdbGTFfile {input.annotation} "
+        "--sjdbGTFtagExonParentTranscript Parent "
+        "--sjdbGTFtagExonParentGene gene "
+        "&> {log}"
+
+
+# gunzip the input if necessary
+rule collect_references:
+    input:
+        get_ref,
+    output:
+        temp(Path(run_tmpdir, "index", "{index_file}")),
+    wildcard_constraints:
+        index_file="ref\\.fna|ref\\.gff",
+    container:
+        star
+    shell:
+        "if "
+        "[[ $(od -An -tx1 -N2 {input} | tr -d ' \\n') == \"1f8b\" ]] ; "
+        "then "
+        "gunzip -c {input} > {output} ; "
+        "else "
+        "ln -s $(readlink -f {input}) $(readlink -f {output}) ; "
+        "fi"
+
+
+rule collect_reads:
+    input:
+        get_sample_reads,
+    output:
+        temp(Path(run_tmpdir, "reads", "{sample}.{r}.fastq")),
+    wildcard_constraints:
+        r="r1|r2",
+    container:
+        star
+    shell:
+        "if "
+        "[[ $(od -An -tx1 -N2 {input} | tr -d ' \\n') == \"1f8b\" ]] ; "
+        "then "
+        "gunzip -c {input} > {output} ; "
+        "else "
+        "ln -s $(readlink -f {input}) $(readlink -f {output}) ; "
+        "fi"
