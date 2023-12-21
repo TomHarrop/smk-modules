@@ -8,7 +8,7 @@ import tempfile
 
 
 def check_sample_name(sample_name):
-    if re.compile("[^a-zA-Z0-9_]").search(sample_name):
+    if re.compile("[^a-zA-Z0-9_\-]").search(sample_name):
         raise ValueError(f"{sample_name} contains special character(s)")
 
 
