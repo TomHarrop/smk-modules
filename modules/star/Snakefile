@@ -2,12 +2,39 @@
 
 from pathlib import Path
 from snakemake.logging import logger
+import pandas as pd
 import re
 import tempfile
+
 
 def check_sample_name(sample_name):
     if re.compile("[^a-zA-Z0-9_]").search(sample_name):
         raise ValueError(f"{sample_name} contains special character(s)")
+
+
+def get_all_samples(wildcards):
+    my_csv_file = checkpoints.collect_sample_csv.get(**wildcards).output[0]
+    return sorted(
+        set(pd.read_csv(my_csv_file, header=0, index_col="sample_name").index)
+    )
+
+
+def get_junctions(wildcards):
+    all_samples = get_all_samples(wildcards)
+    return expand(
+        Path(outdir, "first_pass", "{sample}.SJ.out.tab"),
+        sample=all_samples,
+    )
+
+
+def get_sample_reads(wildcards):
+    my_csv_file = checkpoints.collect_sample_csv.get(**wildcards).output[0]
+    my_sample = wildcards.sample
+    check_sample_name(my_sample)
+    my_readname = wildcards.r
+    return pd.read_csv(my_csv_file, header=0, index_col="sample_name").loc[
+        my_sample
+    ][my_readname]
 
 
 def get_ref(wildcards):
@@ -19,8 +46,22 @@ def get_ref(wildcards):
         raise ValueError(f"WTF {wildcards.index_file}")
 
 
-def get_sample_reads(wildcards):
-    return sample_dict[wildcards.sample][wildcards.r]
+def get_targets(wildcards):
+    all_samples = get_all_samples(wildcards)
+    return expand(
+        Path(outdir, "{sample}", "{star_output}"),
+        sample=all_samples,
+        star_output=star_outputs,
+    )
+
+
+def get_unmapped(wildcards):
+    all_samples = get_all_samples(wildcards)
+    return expand(
+        Path(outdir, "{sample}", "unmapped.r{r}.fastq.gz"),
+        sample=all_samples,
+        r=[1, 2],
+    )
 
 
 def make_star_prefix(wildcards, output):
@@ -63,15 +104,8 @@ reference = config["reference"]
 logger.info(f"star: reference genome {reference}")
 annotation = config["annotation"]
 logger.info(f"star: reference annotation {annotation}")
-
-sample_dict = config["samples"]
-logger.info("star: caught sample_dict")
-logger.debug(f"star: {sample_dict}")
-all_samples = sorted(set(sample_dict.keys()))
-for sample in all_samples:
-    check_sample_name(sample)
-    logger.info(f"Sample name {sample} seems OK")
-
+sample_csv_file = config["sample_csv"]
+logger.info(f"star: reading samples from {sample_csv_file}")
 
 # specify outputs
 star_outputs = ["Aligned.sortedByCoord.out.bam", "ReadsPerGene.out.tab"]
@@ -82,22 +116,13 @@ star_outputs = ["Aligned.sortedByCoord.out.bam", "ReadsPerGene.out.tab"]
 
 
 wildcard_constraints:
-    sample="|".join([re.escape(x) for x in all_samples]),
     star_output="|".join([re.escape(x) for x in star_outputs]),
 
 
 rule target:
     input:
-        expand(
-            Path(outdir, "{sample}", "{star_output}"),
-            sample=all_samples,
-            star_output=star_outputs,
-        ),
-        expand(
-            Path(outdir, "{sample}", "unmapped.r{r}.fastq.gz"),
-            sample=all_samples,
-            r=[1, 2],
-        ),
+        get_targets,
+        get_unmapped,
 
 
 rule collect_unmapped:
@@ -131,10 +156,7 @@ rule second_pass:
         r1=Path(run_tmpdir, "reads", "{sample}.r1.fastq"),
         r2=Path(run_tmpdir, "reads", "{sample}.r2.fastq"),
         sa=Path(run_tmpdir, "index", "SA"),
-        junctions=expand(
-            Path(outdir, "first_pass", "{sample}.SJ.out.tab"),
-            sample=all_samples,
-        ),
+        junctions=get_junctions,
     output:
         bam=Path(
             outdir, "second_pass", "{sample}.Aligned.sortedByCoord.out.bam"
@@ -274,3 +296,13 @@ rule collect_reads:
         "else "
         "ln -s $(readlink -f {input}) $(readlink -f {output}) ; "
         "fi"
+
+
+checkpoint collect_sample_csv:
+    input:
+        sample_csv_file,
+    output:
+        Path(run_tmpdir, "samples.csv"),
+    handover: True
+    shell:
+        "cp {input} {output}"
