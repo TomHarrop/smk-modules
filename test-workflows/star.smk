@@ -19,7 +19,7 @@ annotation = Path(test_data, "NT_033779.5.gff.gz")
 star_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/star/Snakefile",
-    tag="0.0.27",
+    tag="0.0.28",
 )
 
 
@@ -35,21 +35,54 @@ sample_dict = {
     },
 }
 
+###########
+# MODULES #
+###########
 
-module star:
+# these have to come before local rules or they don't get added to rules
+
+
+module star_withannot:
     snakefile:
         star_snakefile
     config:
         {
             "reference": reference,
             "annotation": annotation,
-            "outdir": test_outdir,
-            "run_tmpdir": run_tmpdir,
+            "outdir": Path(test_outdir, "withannot"),
+            "run_tmpdir": Path(run_tmpdir, "withannot"),
             "sample_csv": sample_csv,
         }
 
 
-use rule * from star as star_*
+use rule * from star_withannot as star_withannot_*
+
+
+module star_noannot:
+    snakefile:
+        star_snakefile
+    config:
+        {
+            "reference": reference,
+            "outdir": Path(test_outdir, "noannot"),
+            "run_tmpdir": Path(run_tmpdir, "noannot"),
+            "sample_csv": sample_csv,
+        }
+
+
+use rule * from star_noannot as star_noannot_*
+
+
+#########
+# RULES #
+#########
+
+
+rule target:
+    input:
+        rules.star_withannot_target.input,
+        rules.star_noannot_target.input,
+    default_target: True
 
 
 checkpoint generate_csv:

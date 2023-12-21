@@ -100,15 +100,52 @@ except KeyError as e:
     logger.warning("This probably won't work on a cluster!")
 
 # catch input
-reference = config["reference"]
-logger.info(f"star: reference genome {reference}")
-annotation = config["annotation"]
-logger.info(f"star: reference annotation {annotation}")
 sample_csv_file = config["sample_csv"]
 logger.info(f"star: reading samples from {sample_csv_file}")
+reference = config["reference"]
+logger.info(f"star: reference genome {reference}")
+
+#############################
+# do we have an annotation? #
+#############################
+
+count_reads = True
+index_inputs = {
+    "reference": Path(run_tmpdir, "index", "ref.fna"),
+}
+index_params = {"gff_input": ""}
+second_pass_output = {
+    "bam": Path(
+        outdir, "second_pass", "{sample}.Aligned.sortedByCoord.out.bam"
+    ),
+    "unmapped": temp(
+        expand(
+            Path(outdir, "second_pass", "{{sample}}.Unmapped.out.mate{r}"),
+            r=[1, 2],
+        )
+    ),
+}
+
+try:
+    annotation = config["annotation"]
+    logger.info(f"star: reference annotation {annotation}")
+    index_inputs["annotation"] = Path(run_tmpdir, "index", "ref.gff")
+    index_params["gff_input"] = (
+        f'--sjdbGTFfile {index_inputs["annotation"]} '
+        "--sjdbGTFtagExonParentTranscript Parent "
+        "--sjdbGTFtagExonParentGene gene "
+    )
+    second_pass_output["counts"] = Path(
+        outdir, "second_pass", "{sample}.ReadsPerGene.out.tab"
+    )
+except KeyError:
+    logger.warning(f"star: running without an annotation")
+    count_reads = False
 
 # specify outputs
-star_outputs = ["Aligned.sortedByCoord.out.bam", "ReadsPerGene.out.tab"]
+star_outputs = ["Aligned.sortedByCoord.out.bam"]
+if count_reads:
+    star_outputs.append("ReadsPerGene.out.tab")
 
 #########
 # RULES #
@@ -158,21 +195,13 @@ rule second_pass:
         sa=Path(run_tmpdir, "index", "SA"),
         junctions=get_junctions,
     output:
-        bam=Path(
-            outdir, "second_pass", "{sample}.Aligned.sortedByCoord.out.bam"
-        ),
-        counts=Path(outdir, "second_pass", "{sample}.ReadsPerGene.out.tab"),
-        unmapped=temp(
-            expand(
-                Path(
-                    outdir, "second_pass", "{{sample}}.Unmapped.out.mate{r}"
-                ),
-                r=[1, 2],
-            )
-        ),
+        **second_pass_output,
     params:
         index=lambda wildcards, input: Path(input.sa).parent,
         prefix=make_star_prefix,
+        gene_counts=lambda wildcards: "--quantMode GeneCounts "
+        if count_reads
+        else "",
     log:
         Path(logdir, "second_pass.{sample}.log"),
     benchmark:
@@ -191,7 +220,7 @@ rule second_pass:
         "--outSAMattrRGline ID:{wildcards.sample} "
         "--outSAMtype BAM SortedByCoordinate "
         "--outSAMunmapped None "
-        "--quantMode GeneCounts "
+        "{params.gene_counts} "
         "--readFilesIn {input.r1} {input.r2} "
         "--runThreadN {threads} "
         "--sjdbFileChrStartEnd {input.junctions} "
@@ -231,11 +260,11 @@ rule first_pass:
 
 rule index_reference:
     input:
-        reference=Path(run_tmpdir, "index", "ref.fna"),
-        annotation=Path(run_tmpdir, "index", "ref.gff"),
+        **index_inputs,
     output:
         sa=Path(run_tmpdir, "index", "SA"),
     params:
+        **index_params,
         index=lambda wildcards, output: Path(output.sa).parent,
     log:
         Path(logdir, "index_reference.log"),
@@ -253,9 +282,7 @@ rule index_reference:
         "--runMode genomeGenerate "
         "--genomeDir {params.index} "
         "--genomeFastaFiles {input.reference} "
-        "--sjdbGTFfile {input.annotation} "
-        "--sjdbGTFtagExonParentTranscript Parent "
-        "--sjdbGTFtagExonParentGene gene "
+        "{params.gff_input} "
         "&> {log}"
 
 
