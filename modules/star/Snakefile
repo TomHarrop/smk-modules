@@ -192,7 +192,7 @@ rule second_pass:
     input:
         r1=Path(run_tmpdir, "reads", "{sample}.r1.fastq"),
         r2=Path(run_tmpdir, "reads", "{sample}.r2.fastq"),
-        sa=Path(run_tmpdir, "index", "SA"),
+        sa=Path(outdir, "index", "SA"),
         junctions=get_junctions,
     output:
         **second_pass_output,
@@ -231,7 +231,7 @@ rule first_pass:
     input:
         r1=Path(run_tmpdir, "reads", "{sample}.r1.fastq"),
         r2=Path(run_tmpdir, "reads", "{sample}.r2.fastq"),
-        sa=Path(run_tmpdir, "index", "SA"),
+        sa=Path(outdir, "index", "SA"),
     output:
         sjdb=Path(outdir, "first_pass", "{sample}.SJ.out.tab"),
     params:
@@ -262,7 +262,7 @@ rule index_reference:
     input:
         **index_inputs,
     output:
-        sa=Path(run_tmpdir, "index", "SA"),
+        sa=temp(Path(outdir, "index", "SA")),
     params:
         **index_params,
         index=lambda wildcards, output: Path(output.sa).parent,

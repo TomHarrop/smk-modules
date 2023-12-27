@@ -19,7 +19,7 @@ annotation = Path(test_data, "NT_033779.5.gff.gz")
 star_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/star/Snakefile",
-    tag="0.0.28",
+    tag="0.0.30",
 )
 
 
