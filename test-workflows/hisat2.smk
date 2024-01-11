@@ -22,7 +22,7 @@ annotation = Path(test_data, "NT_033779.5.gtf.gz")
 hisat2_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/hisat2/Snakefile",
-    tag="0.0.32",
+    tag="0.0.33",
 )
 
 

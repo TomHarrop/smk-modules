@@ -160,7 +160,6 @@ rule align:
         "hisat2 "
         "--no-unal "
         "--rg-id {wildcards.sample} "
-        "--rna-strandness RF "
         "-1 {input.r1} "
         "-2 {input.r2} "
         "-p {threads} "
