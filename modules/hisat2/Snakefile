@@ -1,0 +1,287 @@
+#!/usr/bin/env python3
+
+from pathlib import Path
+from snakemake.logging import logger
+import pandas as pd
+import re
+import tempfile
+
+
+def check_sample_name(sample_name):
+    if re.compile("[^a-zA-Z0-9_\-]").search(sample_name):
+        raise ValueError(f"{sample_name} contains special character(s)")
+
+
+def get_all_samples(wildcards):
+    my_csv_file = checkpoints.collect_sample_csv.get(**wildcards).output[0]
+    return sorted(
+        set(pd.read_csv(my_csv_file, header=0, index_col="sample_name").index)
+    )
+
+
+def get_targets(wildcards):
+    all_samples = get_all_samples(wildcards)
+    return expand(Path(outdir, "{sample}.bam"), sample=all_samples)
+
+
+def get_sample_reads(wildcards):
+    my_csv_file = checkpoints.collect_sample_csv.get(**wildcards).output[0]
+    my_sample = wildcards.sample
+    check_sample_name(my_sample)
+    my_readname = wildcards.r
+    return pd.read_csv(my_csv_file, header=0, index_col="sample_name").loc[
+        my_sample
+    ][my_readname]
+
+
+def get_ref(wildcards):
+    if wildcards.index_file == "ref.fna":
+        return reference
+    elif wildcards.index_file == "ref.gtf":
+        return annotation
+    else:
+        raise ValueError(f"WTF {wildcards.index_file}")
+
+
+###########
+# GLOBALS #
+###########
+
+# containers
+pigz = "docker://quay.io/biocontainers/pigz:2.3.4"
+hisat2 = "docker://quay.io/biocontainers/hisat2:2.2.1--hdbdd923_6"
+samtools = "docker://quay.io/biocontainers/samtools:1.19--h50ea8bc_0"
+
+# set up directories
+outdir = Path(config["outdir"] if "outdir" in config else ".")
+logger.debug(f"outdir: {outdir}")
+logdir = Path(outdir, "logs")
+benchdir = Path(logdir, "benchmarks")
+
+# set up a temporary directory for this run
+try:
+    run_tmpdir = config["run_tmpdir"]
+    logger.info(f"Caught run_tmpdir {run_tmpdir}")
+except KeyError as e:
+    logger.info(f"{e} not set in config")
+    run_tmpdir = tempfile.mkdtemp()
+    logger.info(f"Setting run_tmpdir to {run_tmpdir}")
+    logger.warning("This probably won't work on a cluster!")
+
+# catch input
+sample_csv_file = config["sample_csv"]
+logger.info(f"hisat2: reading samples from {sample_csv_file}")
+reference = config["reference"]
+logger.info(f"hisat2: reference genome {reference}")
+
+#############################
+# do we have an annotation? #
+#############################
+
+index_inputs = {
+    "reference": Path(run_tmpdir, "index", "ref.fna"),
+}
+index_params = {"annotations": ""}
+
+try:
+    annotation = config["annotation"]
+    logger.info(f"hisat2: reference annotation {annotation}")
+    splice_sites = Path(run_tmpdir, "index", "splice_sites.tsv")
+    exons = Path(run_tmpdir, "index", "exons.tsv")
+    index_inputs["splice_sites"] = splice_sites
+    index_inputs["exons"] = exons
+    index_params[
+        "annotations"
+    ] = f"--ss {splice_sites.as_posix()} --exon {exons.as_posix()} "
+except KeyError:
+    logger.warning(f"hisat2: running without an annotation")
+
+
+#########
+# RULES #
+#########
+
+
+rule target:
+    input:
+        get_targets,
+
+
+rule sort:
+    input:
+        Path(run_tmpdir, "hisat2", "{sample}.unsorted.bam"),
+    output:
+        Path(outdir, "{sample}.bam"),
+    container:
+        samtools
+    shell:
+        "samtools sort "
+        "-l 9 "
+        "-o {output} "
+        "{input}"
+
+
+rule sam_to_bam:
+    input:
+        sam=Path(run_tmpdir, "hisat2", "{sample}.sam"),
+        ref=Path(run_tmpdir, "index", "ref.fna"),
+    output:
+        pipe(Path(run_tmpdir, "hisat2", "{sample}.unsorted.bam")),
+    container:
+        samtools
+    shell:
+        "samtools view -buT {input.ref} {input.sam} >> {output}"
+
+
+rule align:
+    input:
+        r1=Path(run_tmpdir, "reads", "{sample}.r1.fastq"),
+        r2=Path(run_tmpdir, "reads", "{sample}.r2.fastq"),
+        fmidx=expand(Path(outdir, "index", "ref.{n}.ht2"), n=range(1, 9)),
+    output:
+        sam=pipe(Path(run_tmpdir, "hisat2", "{sample}.sam")),
+    params:
+        ht2_base=lambda wildcards, input: Path(
+            Path(input.fmidx[0])
+            .with_name(Path(input.fmidx[0]).stem)
+            .with_suffix("")
+        ).as_posix(),
+    log:
+        Path(logdir, "align.{sample}.log"),
+    benchmark:
+        Path(benchdir, "align.{sample}.txt")
+    threads: lambda wildcards, attempt: 6 * attempt
+    resources:
+        time=lambda wildcards, attempt: 30 * attempt,
+        mem_mb=lambda wildcards, attempt: 8e3 * attempt,
+    container:
+        hisat2
+    shell:
+        "hisat2 "
+        "--no-unal "
+        "--rg-id {wildcards.sample} "
+        "--rna-strandness RF "
+        "-1 {input.r1} "
+        "-2 {input.r2} "
+        "-p {threads} "
+        "-q "
+        "-x {params.ht2_base} "
+        ">> {output.sam} "
+        "2> {log}"
+
+
+rule index_reference:
+    input:
+        **index_inputs,
+    output:
+        fmidx=temp(expand(Path(outdir, "index", "ref.{n}.ht2"), n=range(1, 9))),
+    params:
+        **index_params,
+        ht2_base=lambda wildcards, output: Path(
+            Path(output.fmidx[0]).parent, "ref"
+        ).as_posix(),
+    log:
+        Path(logdir, "index_reference.log"),
+    benchmark:
+        Path(benchdir, "index_reference.txt")
+    threads: lambda wildcards, attempt: 10 * attempt
+    resources:
+        time=lambda wildcards, attempt: 30 * attempt,
+        mem_mb=lambda wildcards, attempt: 8e3 * attempt,
+    container:
+        hisat2
+    shell:
+        "hisat2-build "
+        "-f "
+        "-p {threads} "
+        "{params.annotations} "
+        "{input.reference} "
+        "{params.ht2_base} "
+        "&> {log}"
+
+
+# get the splice junction and exon tsvs
+rule extract_splice_sites:
+    input:
+        Path(run_tmpdir, "index", "ref.gtf"),
+    output:
+        Path(run_tmpdir, "index", "splice_sites.tsv"),
+    container:
+        hisat2
+    log:
+        Path(logdir, "extract_splice_sites.log"),
+    benchmark:
+        Path(benchdir, "extract_splice_sites.txt")
+    shell:
+        "hisat2_extract_splice_sites.py "
+        "{input} "
+        ">{output} "
+        "2>{log}"
+
+
+rule extract_exons:
+    input:
+        Path(run_tmpdir, "index", "ref.gtf"),
+    output:
+        Path(run_tmpdir, "index", "exons.tsv"),
+    container:
+        hisat2
+    log:
+        Path(logdir, "extract_exons.log"),
+    benchmark:
+        Path(benchdir, "extract_exons.txt")
+    shell:
+        "hisat2_extract_exons.py "
+        "{input} "
+        ">{output} "
+        "2>{log}"
+
+
+# gunzip the input if necessary
+rule collect_references:
+    input:
+        get_ref,
+    output:
+        temp(Path(run_tmpdir, "index", "{index_file}")),
+    wildcard_constraints:
+        index_file="ref\\.fna|ref\\.gtf",
+    container:
+        hisat2
+    shell:
+        "if "
+        "[[ $(od -An -tx1 -N2 {input} | tr -d ' \\n') == \"1f8b\" ]] ; "
+        "then "
+        "gunzip -c {input} > {output} ; "
+        "else "
+        "ln -s $(readlink -f {input}) $(readlink -f {output}) ; "
+        "fi"
+
+
+rule collect_reads:
+    input:
+        get_sample_reads,
+    output:
+        temp(Path(run_tmpdir, "reads", "{sample}.{r}.fastq")),
+    wildcard_constraints:
+        r="r1|r2",
+    container:
+        hisat2
+    shell:
+        "if "
+        "[[ $(od -An -tx1 -N2 {input} | tr -d ' \\n') == \"1f8b\" ]] ; "
+        "then "
+        "gunzip -c {input} > {output} ; "
+        "else "
+        "ln -s $(readlink -f {input}) $(readlink -f {output}) ; "
+        "fi"
+
+
+checkpoint collect_sample_csv:
+    input:
+        sample_csv_file,
+    output:
+        Path(run_tmpdir, "samples.csv"),
+    container:
+        hisat2
+    shell:
+        "cp {input} {output}"
