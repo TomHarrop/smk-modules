@@ -6,7 +6,7 @@ java_home=$1
 printf "java_home: %s\n" "${java_home}"
 export _JAVA_OPTIONS=-Duser.home=${java_home}
 
-prop_file="$(readlink -f $(command -v interproscan.sh))/interproscan.properties"
+prop_file="$(dirname $(readlink -f $(command -v interproscan.sh)))/interproscan.properties"
 printf "prop_file: %s\n" "${prop_file}"
 
 

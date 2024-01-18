@@ -94,3 +94,48 @@ wget \
 
 gunzip test-data/funannotate/eggnog/eggnog_proteins.dmnd.gz
 ```
+
+## get the eggnog DB from the container
+
+```bash
+tmpdir="$( mktemp -d )"
+IPR_DIR="$( readlink -f test-data/funannotate/interproscan )"
+
+export JAVA_OPTIONS=-Duser.home=$IPR_DIR
+
+mkdir -p "${IPR_DIR}"
+mkdir -p "${IPR_DIR}/.interproscan-5"
+
+apptainer exec \
+    -B ${tmpdir} \
+    -H ${tmpdir} \
+    --pwd ${tmpdir} \
+    --containall \
+    --cleanenv \
+    --writable-tmpfs \
+    docker://quay.io/biocontainers/interproscan:5.59_91.0--hec16e2b_1 \
+        cp -r /usr/local/share/InterProScan/data \
+        /usr/local/share/InterProScan/interproscan.properties \
+        ./ 
+
+mv "${tmpdir}/data" "${IPR_DIR}/"
+
+sed \
+"s|^\(data.directory=\).*$|\1${IPR_DIR}/data|" \
+"${tmpdir}/interproscan.properties" \
+> "${IPR_DIR}/.interproscan-5/interproscan.properties"
+
+apptainer exec \
+    -B ${IPR_DIR} \
+    -B "${IPR_DIR}/.interproscan-5/interproscan.properties":/usr/local/share/InterProScan/interproscan.properties \
+    -H ${tmpdir} \
+    --pwd ${tmpdir} \
+    --containall \
+    --cleanenv \
+    --writable-tmpfs \
+    --env _JAVA_OPTIONS=$JAVA_OPTIONS \
+    --env IPR_DIR=$IPR_DIR \
+    docker://quay.io/biocontainers/interproscan:5.59_91.0--hec16e2b_1 \
+    python3 /usr/local/share/InterProScan/setup.py \
+    /usr/local/share/InterProScan/interproscan.properties
+```
