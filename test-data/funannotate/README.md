@@ -125,17 +125,40 @@ sed \
 "${tmpdir}/interproscan.properties" \
 > "${IPR_DIR}/.interproscan-5/interproscan.properties"
 
+# Run hmmpress on all hmm files in the interproscan directory.
+# This is what setup.py is supposed to do.
 apptainer exec \
     -B ${IPR_DIR} \
-    -B "${IPR_DIR}/.interproscan-5/interproscan.properties":/usr/local/share/InterProScan/interproscan.properties \
     -H ${tmpdir} \
     --pwd ${tmpdir} \
     --containall \
     --cleanenv \
     --writable-tmpfs \
-    --env _JAVA_OPTIONS=$JAVA_OPTIONS \
     --env IPR_DIR=$IPR_DIR \
     docker://quay.io/biocontainers/interproscan:5.59_91.0--hec16e2b_1 \
-    python3 /usr/local/share/InterProScan/setup.py \
-    /usr/local/share/InterProScan/interproscan.properties
+    find ${IPR_DIR}/data -type f -name "*.hmm" \
+    -exec /usr/local/bin/hmmpress {}  \; 
+
+# Test run interproscan
+    --containall \
+    --cleanenv \
+    --writable-tmpfs \
+
+
+apptainer exec \
+    -B ${IPR_DIR} \
+    -B ${PWD} \
+    -H ${tmpdir} \
+    --pwd ${PWD} \
+    --env IPR_DIR=$IPR_DIR \
+    docker://quay.io/biocontainers/interproscan:5.59_91.0--hec16e2b_1 \
+    bash -c '\
+        export _JAVA_OPTIONS=-Duser.home=${IPR_DIR} &&
+        interproscan.sh \
+        -dp \
+        -i test-output/funannotate/funannotate/predict_results/testspecies.proteins.fa \
+        --output-dir test_ipr \
+        --cpu 11 \
+        ' > log.out 2> log.err
+
 ```
