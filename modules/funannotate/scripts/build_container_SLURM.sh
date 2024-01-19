@@ -7,7 +7,6 @@
 #SBATCH --output=ipr_build.slurm.out
 #SBATCH --error=ipr_build.slurm.err
 #SBATCH --mail-type=ALL
-#SBATCH --export=ALL
 #SBATCH --partition=io
 
 # Dependencies
@@ -17,6 +16,8 @@ git clone https://github.com/TomHarrop/container-interproscan.git
 
 VERSION="$(cat container-interproscan/VERSION)"
 
-apptainer build \
-    "interproscan_${VERSION}.sif"
+# clobber the bindpath, or it causes errors
+APPTAINER_BINDPATH="" \
+    apptainer build \
+    "interproscan_${VERSION}.sif" \
     container-interproscan/Singularity
