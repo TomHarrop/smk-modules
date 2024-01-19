@@ -55,7 +55,7 @@ fa_config = {
 # fa_snakefile = "../modules/funannotate/Snakefile"
 fa_snakefile = github(
     "tomharrop/smk-modules",
-    path="modules/braker3/Snakefile",
+    path="modules/funannotate/Snakefile",
     tag="0.0.34",
 )
 
