@@ -9,13 +9,14 @@ from snakemake.logging import logger
 # FUNCTIONS #
 #############
 
+
 def resolve_input(wildcards, input):
     output_dict = {}
     for key, value in input.items():
         try:
             output_dict[key] = Path(value).resolve()
         except TypeError as e:
-            logger.debug(f'Not trying to resolve {key}')
+            logger.debug(f"Not trying to resolve {key}")
     return output_dict
 
 
@@ -25,13 +26,13 @@ def resolve_output(wildcards, output):
         try:
             output_dict[key] = Path(value).resolve()
         except TypeError as e:
-            logger.debug(f'Not trying to resolve {key}')
+            logger.debug(f"Not trying to resolve {key}")
     return output_dict
 
 
 def sample_name_sanitiser(sample_name):
-    if re.compile('[^a-zA-Z0-9_-]').search(sample_name):
-        raise ValueError(f'{sample_name} contains special character(s)')
+    if re.compile("[^a-zA-Z0-9_-]").search(sample_name):
+        raise ValueError(f"{sample_name} contains special character(s)")
 
 
 ###########
@@ -39,81 +40,71 @@ def sample_name_sanitiser(sample_name):
 ###########
 
 # containers
-hybpiper = 'docker://quay.io/biocontainers/hybpiper:2.1.6--h031d066_0'
-pigz = 'docker://quay.io/biocontainers/pigz:2.3.4'
+hybpiper = "docker://quay.io/biocontainers/hybpiper:2.1.6--h031d066_0"
+pigz = "docker://quay.io/biocontainers/pigz:2.3.4"
+bbmap = "docker://quay.io/biocontainers/bbmap:39.01--h92535d8_1"
 
 # set up directories
-outdir = Path(config['outdir'] if 'outdir' in config else '.')
-logger.debug(f'outdir: {outdir}')
-logdir = Path(outdir, 'logs')
+outdir = Path(config["outdir"] if "outdir" in config else ".")
+logger.debug(f"outdir: {outdir}")
+logdir = Path(outdir, "logs")
 
 
 # set up a temporary directory for this run
 try:
-    run_tmpdir = config['run_tmpdir']
-    logger.info(f'Caught run_tmpdir {run_tmpdir}')
+    run_tmpdir = config["run_tmpdir"]
+    logger.info(f"Caught run_tmpdir {run_tmpdir}")
 except KeyError as e:
-    logger.info(f'{e} not set in config')
+    logger.info(f"{e} not set in config")
     run_tmpdir = tempfile.mkdtemp()
-    logger.info(f'Setting run_tmpdir to {run_tmpdir}')
-    logger.warning('This probably won\'t work on a cluster!')
+    logger.info(f"Setting run_tmpdir to {run_tmpdir}")
+    logger.warning("This probably won't work on a cluster!")
 
 
 # catch samples
-all_samples = sorted(set(config['sample_list']))
-logger.debug('Caught sample list:')
+all_samples = sorted(set(config["sample_list"]))
+logger.debug("Caught sample list:")
 logger.debug(all_samples)
 
 # catch read directory
-read_directory = config['read_directory']
-logger.debug(f'Caught read_directory: {read_directory}')
+read_directory = config["read_directory"]
+logger.debug(f"Caught read_directory: {read_directory}")
 
-# catch config
-target_file = config['target_file']
-logger.debug(f'Caught target_file: {target_file}')
+# catch target_file
+target_file = config["target_file"]
+logger.debug(f"Caught target_file: {target_file}")
+tmp_target_file = Path(run_tmpdir, "targetfile.fasta")
 
 # define outputs
-namelist = Path(
-    outdir,
-    'namelist.txt'
-    )
+namelist = Path(outdir, "namelist.txt")
 
-fixed_tf = Path(
-    outdir,
-    'target_file.fixed.fasta'
-    )
+fixed_tf = Path(outdir, "target_file.fixed.fasta")
+
 
 # make sure nothing crazy happens with sample names
 wildcard_constraints:
-    sample = '|'.join(all_samples)
+    sample="|".join(all_samples),
+
 
 ############
 # WORKFLOW #
 ############
 
+
 rule target:
     input:
         expand(
-            Path(
-                outdir,
-                'sequences.{type}.tar.gz'
-                ),
-            type=['dna','aa','intron','supercontig']
-            ),
+            Path(outdir, "sequences.{type}.tar.gz"),
+            type=["dna", "aa", "intron", "supercontig"],
+        ),
         expand(
-            Path(
-                outdir,
-                'hybpiper_stats.{type}.tsv'
-                ),
-            type=['gene', 'supercontig']
-            ),
+            Path(outdir, "hybpiper_stats.{type}.tsv"),
+            type=["gene", "supercontig"],
+        ),
         expand(
-            Path(
-                outdir,
-                'paralogs.{type}.tar.gz'
-                ),
-            type=['all', 'no_chimeras']
-            )
+            Path(outdir, "paralogs.{type}.tar.gz"),
+            type=["all", "no_chimeras"],
+        ),
 
 
 # Need lots of files here, try to do it in the job tmp area provided to
@@ -123,450 +114,338 @@ rule target:
 # tempfile.mkdtemp() is used in the Snakefile.
 rule archive_hybpiper_sequences:
     input:
-        folder = Path(
-            run_tmpdir,
-            'sequences.{type}'
-            )
+        folder=Path(run_tmpdir, "sequences.{type}"),
     output:
-        tarfile = Path(
-            outdir,
-            'sequences.{type}.tar.gz'
-            )
+        tarfile=Path(outdir, "sequences.{type}.tar.gz"),
     params:
-        resolve_output
-    threads:
-        lambda wildcards, attempt: 4 * attempt
+        resolve_output,
+    threads: lambda wildcards, attempt: 4 * attempt
     resources:
-        time = lambda wildcards, attempt: 20 * attempt
+        time=lambda wildcards, attempt: 20 * attempt,
     container:
         pigz
     shell:
-        'cd {input.folder} || exit 1 '
-        '&& '
-        'tar -cf - . '
-        '| pigz -p {threads} -9 '
-        '> {params[0][tarfile]} '
+        "cd {input.folder} || exit 1 "
+        "&& "
+        "tar -cf - . "
+        "| pigz -p {threads} -9 "
+        "> {params[0][tarfile]} "
+
 
 rule archive_hybpiper_paralogs:
     input:
-        folder = Path(
-            run_tmpdir,
-            'paralogs.{type}'
-            )
+        folder=Path(run_tmpdir, "paralogs.{type}"),
     output:
-        tarfile = Path(
-            outdir,
-            'paralogs.{type}.tar.gz'
-            )
+        tarfile=Path(outdir, "paralogs.{type}.tar.gz"),
     params:
-        resolve_output
-    threads:
-        lambda wildcards, attempt: 4 * attempt
+        resolve_output,
+    threads: lambda wildcards, attempt: 4 * attempt
     resources:
-        time = lambda wildcards, attempt: 20 * attempt
+        time=lambda wildcards, attempt: 20 * attempt,
     container:
         pigz
     shell:
-        'cd {input.folder} || exit 1 '
-        '&& '
-        'tar -cf - . '
-        '| pigz -p {threads} -9 '
-        '> {params[0][tarfile]} '
+        "cd {input.folder} || exit 1 "
+        "&& "
+        "tar -cf - . "
+        "| pigz -p {threads} -9 "
+        "> {params[0][tarfile]} "
 
 
 rule hybpiper_retrieve_paralogs:
     input:
-        target = fixed_tf,
-        namelist = namelist,
-        sample_files = expand(
-            Path(
-                run_tmpdir,
-                '{sample}'
-                ),
-            sample=all_samples
-            ),
+        target=fixed_tf,
+        namelist=namelist,
+        sample_files=expand(Path(run_tmpdir, "{sample}"), sample=all_samples),
     output:
-        all_dir = temporary(
-            directory(
-                Path(
-                    run_tmpdir,
-                    'paralogs.all'
-                    )
-                )
-            ),
-        nochimeras_dir = temporary(
-            directory(
-                Path(
-                    run_tmpdir,
-                    'paralogs.no_chimeras'
-                    )
-                )
-            ),
-        paralog_report = Path(
-            outdir,
-            'paralog_report.tsv'
-            ),
-        paralogs_above_threshold = Path(
-            outdir,
-            'paralogs_above_threshold.txt'
-            ),
-        heatmap = Path(
-            outdir,
-            'paralog_heatmap.png'
-            )
+        all_dir=temporary(directory(Path(run_tmpdir, "paralogs.all"))),
+        nochimeras_dir=temporary(
+            directory(Path(run_tmpdir, "paralogs.no_chimeras"))
+        ),
+        paralog_report=Path(outdir, "paralog_report.tsv"),
+        paralogs_above_threshold=Path(outdir, "paralogs_above_threshold.txt"),
+        heatmap=Path(outdir, "paralog_heatmap.png"),
     params:
         resolve_input,
         resolve_output,
-        run_tmpdir = run_tmpdir
+        run_tmpdir=run_tmpdir,
     log:
-        Path(
-            logdir,
-            'retrieve_paralogs.log').resolve()
+        Path(logdir, "retrieve_paralogs.log").resolve(),
     benchmark:
-        Path(
-            logdir,
-            'retrieve_paralogs.benchmark.log').resolve()
+        Path(logdir, "retrieve_paralogs.benchmark.log").resolve()
     resources:
-        time = lambda wildcards, attempt: 120 * attempt,
+        time=lambda wildcards, attempt: 120 * attempt,
     container:
         hybpiper
     shell:
-        'cd {params.run_tmpdir} || exit 1 '
-        '&& '
-        'hybpiper paralog_retriever '
-        '--targetfile_dna {params[0][target]} '
-        '--fasta_dir_all paralogs.all '
-        '--fasta_dir_no_chimeras paralogs.no_chimeras '
-        '--paralog_report_filename paralog_report '
-        '--paralogs_above_threshold_report_filename paralogs_above_threshold '
-        '{params[0][namelist]} '
-        '&> {log} '
-        '&& '
-        'cp paralog_report.tsv '
-        '{params[1][paralog_report]} '
-        '&& '
-        'cp paralogs_above_threshold.txt '
-        '{params[1][paralogs_above_threshold]} '
-        '&& '
-        'cp paralog_heatmap.png '
-        '{params[1][heatmap]} '
+        "cd {params.run_tmpdir} || exit 1 "
+        "&& "
+        "hybpiper paralog_retriever "
+        "--targetfile_dna {params[0][target]} "
+        "--fasta_dir_all paralogs.all "
+        "--fasta_dir_no_chimeras paralogs.no_chimeras "
+        "--paralog_report_filename paralog_report "
+        "--paralogs_above_threshold_report_filename paralogs_above_threshold "
+        "{params[0][namelist]} "
+        "&> {log} "
+        "&& "
+        "cp paralog_report.tsv "
+        "{params[1][paralog_report]} "
+        "&& "
+        "cp paralogs_above_threshold.txt "
+        "{params[1][paralogs_above_threshold]} "
+        "&& "
+        "cp paralog_heatmap.png "
+        "{params[1][heatmap]} "
+
 
 rule hybpiper_retrieve_sequences:
     input:
-        target = fixed_tf,
-        namelist = namelist,
-        sample_files = expand(
-            Path(
-                run_tmpdir,
-                '{sample}'
-                ),
-            sample=all_samples
-            ),
+        target=fixed_tf,
+        namelist=namelist,
+        sample_files=expand(Path(run_tmpdir, "{sample}"), sample=all_samples),
     output:
-        fasta_dir = temporary(
-            directory(
-                Path(
-                    run_tmpdir,
-                    'sequences.{type}'
-                    )
-                )
-            ),
+        fasta_dir=temporary(directory(Path(run_tmpdir, "sequences.{type}"))),
     params:
         resolve_input,
-        run_tmpdir = run_tmpdir
+        run_tmpdir=run_tmpdir,
     log:
-        Path(
-            logdir,
-            'retrieve_sequences.{type}.log').resolve()
+        Path(logdir, "retrieve_sequences.{type}.log").resolve(),
     benchmark:
-        Path(
-            logdir,
-            'retrieve_sequences.{type}.benchmark.log').resolve()
+        Path(logdir, "retrieve_sequences.{type}.benchmark.log").resolve()
     resources:
-        time = lambda wildcards, attempt: 120 * attempt,
+        time=lambda wildcards, attempt: 120 * attempt,
     container:
         hybpiper
     shell:
-        'cd {params.run_tmpdir} || exit 1 '
-        '&& '
-        'hybpiper retrieve_sequences '
-        '--targetfile_dna {params[0][target]} '
-        '--sample_names {params[0][namelist]} '
-        '--fasta_dir sequences.{wildcards.type} '
-        '{wildcards.type} '
-        '&> {log} '
+        "cd {params.run_tmpdir} || exit 1 "
+        "&& "
+        "hybpiper retrieve_sequences "
+        "--targetfile_dna {params[0][target]} "
+        "--sample_names {params[0][namelist]} "
+        "--fasta_dir sequences.{wildcards.type} "
+        "{wildcards.type} "
+        "&> {log} "
 
 
 rule hybpiper_stats:
     input:
-        target = fixed_tf,
-        namelist = namelist,
-        sample_files = expand(
-            Path(
-                run_tmpdir,
-                '{sample}'
-                ),
-            sample=all_samples
-            ),
+        target=fixed_tf,
+        namelist=namelist,
+        sample_files=expand(Path(run_tmpdir, "{sample}"), sample=all_samples),
     output:
-        seq_lengths = Path(
-            outdir,
-            'seq_lengths.{type}.tsv'),
-        stats = Path(
-            outdir,
-            'hybpiper_stats.{type}.tsv')
+        seq_lengths=Path(outdir, "seq_lengths.{type}.tsv"),
+        stats=Path(outdir, "hybpiper_stats.{type}.tsv"),
     params:
         resolve_input,
         resolve_output,
-        parent = lambda wildcards, input:
-            Path(input.sample_files[0]).resolve().parent,
+        parent=lambda wildcards, input: Path(input.sample_files[0])
+        .resolve()
+        .parent,
     log:
-        Path(
-            logdir,
-            'stats.{type}.log').resolve()
+        Path(logdir, "stats.{type}.log").resolve(),
     benchmark:
-        Path(
-            logdir,
-            'stats.{type}.benchmark.log').resolve()
+        Path(logdir, "stats.{type}.benchmark.log").resolve()
     resources:
-        time = lambda wildcards, attempt: 120 * attempt,
+        time=lambda wildcards, attempt: 120 * attempt,
     container:
         hybpiper
     shell:
-        'cd {params.parent} || exit 1 '
-        '&& '
-        'hybpiper stats '
-        '--targetfile_dna {params[0][target]} '
-        '--stats_filename hybpiper_stats.{wildcards.type} '
-        '--seq_lengths_filename seq_lengths.{wildcards.type} '
-        '{wildcards.type} '
-        '{params[0][namelist]} '
-        '&> {log} '
-        '&& mv hybpiper_stats.{wildcards.type}.tsv {params[1][stats]} '
-        '&& mv seq_lengths.{wildcards.type}.tsv {params[1][seq_lengths]} '
+        "cd {params.parent} || exit 1 "
+        "&& "
+        "hybpiper stats "
+        "--targetfile_dna {params[0][target]} "
+        "--stats_filename hybpiper_stats.{wildcards.type} "
+        "--seq_lengths_filename seq_lengths.{wildcards.type} "
+        "{wildcards.type} "
+        "{params[0][namelist]} "
+        "&> {log} "
+        "&& mv hybpiper_stats.{wildcards.type}.tsv {params[1][stats]} "
+        "&& mv seq_lengths.{wildcards.type}.tsv {params[1][seq_lengths]} "
+
 
 rule unarchive_hybpiper_results:
     input:
-        tarfile = Path(
-            outdir,
-            'assemble',
-            '{sample}.tar.gz'
-            )
+        tarfile=Path(outdir, "assemble", "{sample}.tar.gz"),
     output:
-        folder = temporary(
-            directory(
-                Path(
-                    run_tmpdir,
-                    '{sample}'
-                    )
-                )
-            )
+        folder=temporary(directory(Path(run_tmpdir, "{sample}"))),
     resources:
-        time = lambda wildcards, attempt: 20 * attempt,
+        time=lambda wildcards, attempt: 20 * attempt,
     container:
         hybpiper
     shell:
-        'mkdir -p {output.folder} '
-        '&& '
-        'gzip -dc {input.tarfile} '
-        '| tar -xf - '
-        '--strip-components=1 '
-        '-C {output.folder} '
+        "mkdir -p {output.folder} "
+        "&& "
+        "gzip -dc {input.tarfile} "
+        "| tar -xf - "
+        "--strip-components=1 "
+        "-C {output.folder} "
 
 
 # Run hybpiper and compress the resuilts
 rule hybpiper_pigz:
     input:
-        Path(
-            run_tmpdir,
-            'assemble',
-            '{sample}.tar'
-            )
+        Path(run_tmpdir, "assemble", "{sample}.tar"),
     output:
-        Path(
-            outdir,
-            'assemble',
-            '{sample}.tar.gz'
-            )
+        Path(outdir, "assemble", "{sample}.tar.gz"),
     resources:
-        time = lambda wildcards, attempt: 10 * attempt,
-    threads:
-        4
+        time=lambda wildcards, attempt: 10 * attempt,
+    threads: 4
     container:
         pigz
     shell:
-        'pigz -p {threads} -9 > {output} < {input} '
+        "pigz -p {threads} -9 > {output} < {input} "
+
 
 rule hybpiper_assemble:
     input:
-        r1 = Path(
-            read_directory,
-            '{sample}.r1.fastq.gz'
-            ),
-        r2 = Path(
-            read_directory,
-            '{sample}.r2.fastq.gz'
-            ),
-        unpaired = Path(
-            read_directory,
-            '{sample}.unpaired.fastq.gz'
-            ),
-        target = fixed_tf
+        r1=Path(read_directory, "{sample}.r1.fastq.gz"),
+        r2=Path(read_directory, "{sample}.r2.fastq.gz"),
+        unpaired=Path(read_directory, "{sample}.unpaired.fastq.gz"),
+        target=fixed_tf,
     output:
-        tarfile = temp(
-            Path(
-                run_tmpdir,
-                'assemble',
-                '{sample}.tar'
-                )
-            )
+        tarfile=temp(Path(run_tmpdir, "assemble", "{sample}.tar")),
     params:
         resolve_input,
         resolve_output,
     log:
-        hybpiper = Path(
-            logdir,
-            'assemble',
-            '{sample}.log').resolve()
+        hybpiper=Path(logdir, "assemble", "{sample}.log").resolve(),
     benchmark:
-        Path(
-            logdir,
-            'assemble',
-            'benchmark.{sample}.log').resolve()
-    threads:
-        lambda wildcards, attempt: 16 * attempt,
+        Path(logdir, "assemble", "benchmark.{sample}.log").resolve()
+    threads: lambda wildcards, attempt: 16 * attempt
     resources:
-        time = lambda wildcards, attempt: 120 * attempt,
-        mem_mb=24000
+        time=lambda wildcards, attempt: 120 * attempt,
+        mem_mb=lambda wildcards, attempt: 16e3 * attempt,
     container:
         hybpiper
     shell:
-        'workdir=$( mktemp -d ) '
-        '; '
-        'cd $workdir '
-        '; '
+        "workdir=$( mktemp -d ) "
+        "; "
+        "cd $workdir "
+        "; "
+        'unpaired_arg="" '
+        "&& "
+        'if [ -s {params[0][unpaired]} ]; then unpaired_arg="--unpaired {params[0][unpaired]} "; fi '
+        "&& "
+        "hybpiper assemble "
+        "--readfiles {params[0][r1]} {params[0][r2]} "
+        "$unpaired_arg"
+        "--targetfile_dna {params[0][target]} "
+        "--diamond "
+        "--cpu {threads} "
+        "--prefix {wildcards.sample} "
+        "&> {log.hybpiper} "
+        "; "
+        "touch "
+        "{wildcards.sample}/"
+        "{wildcards.sample}"
+        "_genes_derived_from_putative_chimeric_stitched_contig.csv"
+
+
+        "; "
+        "tar -cv {wildcards.sample} >> {params[1][tarfile]} "
+        "2>> {log.hybpiper} "
         # hybpiper chokes on empty fastq files. Only add unpaired if it has reads
         # in it.
-        'unpaired_arg="" '
-        '&& '
-        'if [ -s {params[0][unpaired]} ]; then unpaired_arg="--unpaired {params[0][unpaired]} "; fi '
-        '&& '
-        'hybpiper assemble '
-        '--readfiles {params[0][r1]} {params[0][r2]} '
-        '$unpaired_arg'
-        '--targetfile_dna {params[0][target]} '
-        '--diamond '
-        '--cpu {threads} '
-        '--prefix {wildcards.sample} '
-        '&> {log.hybpiper} '
         # Touch the paralog file. This is required because the paralog pipeline
         # won't even run without this file in every sample directory. Most real
         # samples should have the file so touching it is harmless.
-        '; '
-        'touch '
-        '{wildcards.sample}/'
-        '{wildcards.sample}'
-        '_genes_derived_from_putative_chimeric_stitched_contig.csv'
         # the amount of temp files chew through scratch quota
         # try to output to a tar.gz
-        '; '
-        'tar -cv {wildcards.sample} >> {params[1][tarfile]} '
-        '2>> {log.hybpiper} '
+
 
 # fix the targetfile
 rule hybpiper_fix_targetfile:
     input:
-        target = target_file,
-        ctl = Path(
-                run_tmpdir,
-                'check',
-                'fix_targetfile.ctl'
-                )
+        target=tmp_target_file,
+        ctl=Path(run_tmpdir, "check", "fix_targetfile.ctl"),
     output:
-        target_out = fixed_tf,
-        report = Path(
-            logdir,
-            'target_file_report.txt'
-            )
+        target_out=fixed_tf,
+        report=Path(logdir, "target_file_report.txt"),
     params:
         resolve_input,
-        resolve_output
+        resolve_output,
     log:
-        Path(
-            logdir,
-            'fix_targetfile.log').resolve()
+        Path(logdir, "fix_targetfile.log").resolve(),
     benchmark:
-        Path(
-            logdir,
-            'fix_targetfile.benchmark.log').resolve()
-    threads:
-        1
+        Path(logdir, "fix_targetfile.benchmark.log").resolve()
+    threads: 1
     resources:
-        time = lambda wildcards, attempt: 10 * attempt,
-        mem_mb = lambda wildcards, attempt: 1000 * attempt
+        time=lambda wildcards, attempt: 10 * attempt,
+        mem_mb=lambda wildcards, attempt: 1000 * attempt,
     container:
         hybpiper
     shell:
-        'workdir=$( mktemp -d ) '
-        '; '
-        'cd $workdir '
-        '; '
-        'ln -s {params[0][target]} ./target_file.fasta '
-        '&& '
-        'hybpiper fix_targetfile '
-        '--targetfile_dna target_file.fasta '
-        '--allow_gene_removal '
-        '{params[0][ctl]} '
-        '&> {log} '
-        '&& '
-        'cp target_file_fixed.fasta {params[1][target_out]} '
-        '&& '
-        'cp fix_targetfile_report.tsv {params[1][report]} '
+        "workdir=$( mktemp -d ) "
+        "; "
+        "cd $workdir "
+        "; "
+        "ln -s {params[0][target]} ./target_file.fasta "
+        "&& "
+        "hybpiper fix_targetfile "
+        "--targetfile_dna target_file.fasta "
+        "--allow_gene_removal "
+        "{params[0][ctl]} "
+        "&> {log} "
+        "&& "
+        "cp target_file_fixed.fasta {params[1][target_out]} "
+        "&& "
+        "cp fix_targetfile_report.tsv {params[1][report]} "
+
 
 rule hybpiper_check_targetfile:
     input:
-        target = target_file
+        target=tmp_target_file,
     output:
-        ctl = temp(
-            Path(
-                run_tmpdir,
-                'check',
-                'fix_targetfile.ctl'
-                )
-            )
+        ctl=temp(Path(run_tmpdir, "check", "fix_targetfile.ctl")),
     params:
         resolve_input,
-        resolve_output
+        resolve_output,
     log:
-        Path(
-            logdir,
-            'check_targetfile.log').resolve()
+        Path(logdir, "check_targetfile.log").resolve(),
     benchmark:
-        Path(
-            logdir,
-            'check_targetfile.benchmark.log').resolve()
-    threads:
-        1
+        Path(logdir, "check_targetfile.benchmark.log").resolve()
+    threads: 1
     resources:
-        time = lambda wildcards, attempt: 10 * attempt,
-        mem_mb = lambda wildcards, attempt: 1000 * attempt
+        time=lambda wildcards, attempt: 10 * attempt,
+        mem_mb=lambda wildcards, attempt: 1000 * attempt,
     container:
         hybpiper
     shell:
-        'workdir=$( mktemp -d ) '
-        '; '
-        'cd $workdir '
-        '; '
-        'hybpiper check_targetfile '
-        '--targetfile_dna {params[0][target]} '
-        '&> {log} '
-        '&& '
-        'cp *.ctl {params[1][ctl]} '
+        "workdir=$( mktemp -d ) "
+        "; "
+        "cd $workdir "
+        "; "
+        "hybpiper check_targetfile "
+        "--targetfile_dna {params[0][target]} "
+        "&> {log} "
+        "&& "
+        "cp *.ctl {params[1][ctl]} "
+
 
 # prepare for hybpiper
+rule collect_targetfile:
+    input:
+        target_file,
+    output:
+        temp(tmp_target_file),
+    log:
+        Path(logdir, "collect_targetfile.log"),
+    container:
+        bbmap
+    shell:
+        "reformat.sh "
+        "fixheaders=t "
+        "trimreaddescription=t "
+        "ignorejunk=f "
+        "in={input} "
+        "out={output} "
+        "2>{log}"
+
+
 rule generate_namelist:
     output:
-        namelist
+        namelist,
     run:
-        with open(output[0], 'wt') as f:
+        with open(output[0], "wt") as f:
             f.write("\n".join(all_samples))

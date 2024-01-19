@@ -1,0 +1,354 @@
+#!/usr/bin/env python3
+
+from snakemake.logging import logger
+import tempfile
+
+
+#############
+# FUNCTIONS #
+#############
+
+
+def get_paragone_input(wildcards):
+    input_dict = {"paralog_sequences": paralog_sequences}
+    try:
+        input_dict["external_outgroups"] = external_outgroups
+    except NameError:
+        pass
+    logger.debug(input_dict)
+    return input_dict
+
+
+def get_paragone_params(wildcards, input, output):
+    param_dict = {"paralog_sequences": Path(input.paralog_sequences).resolve()}
+    try:
+        eo_path = Path(input.external_outgroups).resolve()
+        param_dict[
+            "external_outgroups"
+        ] = f"--external_outgroups_file {eo_path} "
+    except AttributeError:
+        param_dict["external_outgroups"] = ""
+    try:
+        param_dict[
+            "internal_outgroup"
+        ] = f"--internal_outgroup {internal_outgroup} "
+    except NameError:
+        param_dict["internal_outgroup"] = ""
+    logger.debug(param_dict)
+    return param_dict
+
+
+###########
+# GLOBALS #
+###########
+
+logger.info("Paragone smk-module")
+
+# containers
+paragone = "docker://quay.io/biocontainers/paragone:1.0.0--pl5321h031d066_0"
+pigz = "docker://quay.io/biocontainers/pigz:2.3.4"
+
+# catch input
+paralog_sequences = config["paralog_sequences"]
+logger.debug(f"paralog_sequences {paralog_sequences}")
+
+try:
+    external_outgroups = config["external_outgroups"]
+    logger.debug(f"external_outgroups {external_outgroups}")
+except KeyError as e:
+    logger.warning("external_outgroups not set")
+
+try:
+    internal_outgroup = config["internal_outgroup"]
+    logger.debug(f"internal_outgroup {internal_outgroup}")
+except KeyError as e:
+    logger.warning("internal_outgroup not set")
+
+try:
+    pool = config["pool"]
+    logger.debug(f"pool {pool}")
+except KeyError as e:
+    logger.warning("pool not set, using 1")
+    pool = 1
+
+# set up directories
+outdir = Path(config["outdir"] if "outdir" in config else ".")
+logger.debug(f"outdir: {outdir}")
+logdir = Path(outdir, "logs")
+
+# set up a temporary directory for this run
+try:
+    run_tmpdir = config["run_tmpdir"]
+    logger.info(f"Caught run_tmpdir {run_tmpdir}")
+except KeyError as e:
+    logger.info(f"{e} not set in config")
+    run_tmpdir = tempfile.mkdtemp()
+    logger.info(f"Setting run_tmpdir to {run_tmpdir}")
+    logger.warning("This probably won't work on a cluster!")
+
+paragone_directory = Path(run_tmpdir, "paragone")
+
+#########
+# RULES #
+#########
+
+
+rule target:
+    input:
+        expand(
+            Path(outdir, "{alignment}"),
+            alignment=[
+                "26_MO_final_alignments_trimmed",
+                "27_MI_final_alignments_trimmed",
+                "28_RT_final_alignments_trimmed",
+            ],
+        ),
+        Path(outdir, "intermediate_files.tar.gz"),
+
+
+rule collect_paragone_intermediate_files:
+    input:
+        # wait until the move is complete
+        expand(
+            Path(outdir, "{alignment}"),
+            alignment=[
+                "26_MO_final_alignments_trimmed",
+                "27_MI_final_alignments_trimmed",
+                "28_RT_final_alignments_trimmed",
+            ],
+        ),
+    output:
+        Path(outdir, "intermediate_files.tar.gz"),
+    params:
+        wd=Path(paragone_directory).resolve(),
+    log:
+        Path(logdir, "collect_paragone_intermediate_files.log"),
+    container:
+        pigz
+    threads: workflow.cores
+    resources:
+        mem_mb=lambda wildcards, attempt: 8e3 * attempt,
+        time=lambda wildcards, attempt: 10 * attempt,
+    shell:
+        "tar --directory {params.wd} -cv . "
+        "2> {log} "
+        "| pigz -p {threads} -9 >{output}"
+
+
+rule collect_alignments:
+    input:
+        Path(paragone_directory, "{alignment}"),
+    output:
+        directory(Path(outdir, "{alignment}")),
+    container:
+        pigz
+    resources:
+        mem_mb=lambda wildcards, attempt: 8e3 * attempt,
+        time=lambda wildcards, attempt: 10 * attempt,
+    shell:
+        "mv {input} {output}"
+
+
+rule final_alignments:
+    input:
+        mo=Path(paragone_directory, "14_pruned_MO"),
+        mi=Path(paragone_directory, "15_pruned_MI"),
+        rt=Path(paragone_directory, "16_pruned_RT"),
+        alignments=Path(
+            paragone_directory, "11_pre_paralog_resolution_alignments"
+        ),
+    output:
+        mo=directory(
+            Path(paragone_directory, "26_MO_final_alignments_trimmed")
+        ),
+        mi=directory(
+            Path(paragone_directory, "27_MI_final_alignments_trimmed")
+        ),
+        rt=directory(
+            Path(paragone_directory, "28_RT_final_alignments_trimmed")
+        ),
+    params:
+        wd=Path(paragone_directory).resolve(),
+        threads=lambda wildcards, threads: threads // pool,
+    log:
+        Path(logdir, "final_alignments.log").resolve(),
+    threads: workflow.cores
+    resources:
+        mem_mb=lambda wildcards, attempt: 8e3 * attempt,
+        time=lambda wildcards, attempt: 30 * attempt,
+    container:
+        paragone
+    shell:
+        "cd {params.wd} || exit 1 ; "
+        "paragone final_alignments "
+        "--mo --rt --mi "
+        "--pool " + str(pool) + " "
+        "--threads {params.threads} "
+        "--keep_intermediate_files "
+        "&> {log} "
+
+
+rule prune_paralogs:
+    input:
+        trees=Path(paragone_directory, "13_pre_paralog_resolution_trees"),
+        groups_list=Path(
+            paragone_directory,
+            "00_logs_and_reports",
+            "reports",
+            "in_and_outgroups_list.tsv",
+        ),
+    output:
+        mo=directory(Path(paragone_directory, "14_pruned_MO")),
+        mi=directory(Path(paragone_directory, "15_pruned_MI")),
+        rt=directory(Path(paragone_directory, "16_pruned_RT")),
+    params:
+        wd=Path(paragone_directory).resolve(),
+    log:
+        Path(logdir, "prune_paralogs.log").resolve(),
+    threads: 1
+    resources:
+        mem_mb=lambda wildcards, attempt: 8e3 * attempt,
+        time=lambda wildcards, attempt: 30 * attempt,
+    container:
+        paragone
+    shell:
+        "cd {params.wd} || exit 1 ; "
+        "paragone "
+        "prune_paralogs "
+        "--mo --rt --mi "
+        "&> {log} "
+
+
+rule align_selected_and_tree:
+    input:
+        sequences=Path(paragone_directory, "09_sequences_from_qc_trees"),
+        alignments=Path(paragone_directory, "04_alignments_trimmed_hmmcleaned"),
+        taxon_list=Path(
+            paragone_directory,
+            "00_logs_and_reports",
+            "reports",
+            "outgroup_taxon_list.tsv",
+        ),
+    output:
+        trees=directory(
+            Path(paragone_directory, "13_pre_paralog_resolution_trees")
+        ),
+        alignments=directory(
+            Path(paragone_directory, "11_pre_paralog_resolution_alignments")
+        ),
+        groups_list=Path(
+            paragone_directory,
+            "00_logs_and_reports",
+            "reports",
+            "in_and_outgroups_list.tsv",
+        ),
+    params:
+        wd=Path(paragone_directory).resolve(),
+        threads=lambda wildcards, threads: threads // pool,
+    log:
+        Path(logdir, "align_selected_and_tree.log").resolve(),
+    threads: workflow.cores
+    resources:
+        mem_mb=lambda wildcards, attempt: 8e3 * attempt,
+        time=lambda wildcards, attempt: 30 * attempt,
+    container:
+        paragone
+    shell:
+        "cd {params.wd} || exit 1 ; "
+        "paragone "
+        "align_selected_and_tree 04_alignments_trimmed_hmmcleaned "
+        "--use_fasttree "
+        "--pool " + str(pool) + " "
+        "--threads {params.threads} "
+        "&> {log} "
+
+
+rule qc_trees_and_extract_fasta:
+    input:
+        alignments=Path(paragone_directory, "04_alignments_trimmed_hmmcleaned"),
+        trees=Path(paragone_directory, "05_trees_pre_quality_control"),
+    output:
+        sequences=directory(
+            Path(paragone_directory, "09_sequences_from_qc_trees")
+        ),
+    params:
+        wd=Path(paragone_directory).resolve(),
+    log:
+        Path(logdir, "qc_trees_and_extract_fasta.log").resolve(),
+    threads: 1
+    resources:
+        mem_mb=lambda wildcards, attempt: 8e3 * attempt,
+        time=lambda wildcards, attempt: 30 * attempt,
+    container:
+        paragone
+    shell:
+        "cd {params.wd} || exit 1 ; "
+        "paragone "
+        "qc_trees_and_extract_fasta 04_alignments_trimmed_hmmcleaned "
+        "--treeshrink_q_value 0.20 "
+        "--cut_deep_paralogs_internal_branch_length_cutoff 0.04 "
+        "&> {log} "
+
+
+rule alignment_to_tree:
+    input:
+        alignments=Path(paragone_directory, "04_alignments_trimmed_hmmcleaned"),
+    output:
+        trees=directory(
+            Path(paragone_directory, "05_trees_pre_quality_control")
+        ),
+    params:
+        wd=Path(paragone_directory).resolve(),
+        threads=lambda wildcards, threads: threads // pool,
+    log:
+        Path(logdir, "alignment_to_tree.log").resolve(),
+    threads: workflow.cores
+    resources:
+        mem_mb=lambda wildcards, attempt: 8e3 * attempt,
+        time=lambda wildcards, attempt: 30 * attempt,
+    container:
+        paragone
+    shell:
+        "cd {params.wd} || exit 1 ; "
+        "paragone "
+        "alignment_to_tree 04_alignments_trimmed_hmmcleaned "
+        "--use_fasttree "
+        "--pool " + str(pool) + " "
+        "--threads {params.threads} "
+        "&> {log} "
+
+
+rule check_and_align:
+    input:
+        unpack(get_paragone_input),
+    output:
+        alignments=directory(
+            Path(paragone_directory, "04_alignments_trimmed_hmmcleaned")
+        ),
+        taxon_list=Path(
+            paragone_directory,
+            "00_logs_and_reports",
+            "reports",
+            "outgroup_taxon_list.tsv",
+        ),
+    params:
+        get_paragone_params,
+        wd=Path(paragone_directory).resolve(),
+        threads=lambda wildcards, threads: threads // pool,
+    log:
+        Path(logdir, "check_and_align.log").resolve(),
+    threads: workflow.cores
+    resources:
+        mem_mb=lambda wildcards, attempt: 8e3 * attempt,
+        time=lambda wildcards, attempt: 30 * attempt,
+    container:
+        paragone
+    shell:
+        "cd {params.wd} || exit 1 ; "
+        "paragone "
+        "check_and_align {params[0][paralog_sequences]} "
+        "{params[0][external_outgroups]} "
+        "{params[0][internal_outgroup]} "
+        "--pool " + str(pool) + " "
+        "--threads {params.threads} "
+        "&> {log} "

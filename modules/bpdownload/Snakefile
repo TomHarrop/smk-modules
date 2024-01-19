@@ -1,0 +1,236 @@
+#!/usr/bin/env python3
+
+from snakemake.logging import logger
+from snakemake.remote.HTTP import RemoteProvider as HTTPRemoteProvider
+import csv
+import tempfile
+
+#############
+# FUNCTIONS #
+#############
+
+
+def get_expt_url(wildcards):
+    """
+    Read the URL file AFTER it's been downloaded and parsed.
+    This and get_all_expts cause the URL file to be read many times.
+    """
+    csvfile = checkpoints.parse_run_xml.get(**wildcards).output["csv"]
+    with open(csvfile, "rt") as f:
+        reader = csv.reader(open(csvfile))
+        expt_to_url = dict(reader)
+    my_url = expt_to_url[wildcards.expt]
+    logger.info(f"Snakemake is checking {my_url}")
+    return {
+        "url": HTTP.remote(my_url),
+    }
+
+
+def get_repair_input(wildcards):
+    """
+    Map the LibraryName to an expt
+    """
+    LibraryName_to_expt = {}
+    csvfile = checkpoints.get_run_info.get(**wildcards).output["run_info"]
+    with open(csvfile, "r") as f:
+        reader = csv.reader(f, delimiter=",")
+        # skip the header
+        next(reader, None)
+        for row in reader:
+            LibraryName_to_expt[row[11]] = row[0]
+    my_expt = LibraryName_to_expt[wildcards.LibraryName]
+    return {
+        "r1": Path(run_tmpdir, f"{my_expt}_1.fastq"),
+        "r2": Path(run_tmpdir, f"{my_expt}_2.fastq"),
+    }
+
+
+def get_bpdownload_output(wildcards):
+    LibraryNames = []
+    csvfile = checkpoints.get_run_info.get(**wildcards).output["run_info"]
+    with open(csvfile, "r") as f:
+        reader = csv.reader(f, delimiter=",")
+        # skip the header
+        next(reader, None)
+        for row in reader:
+            LibraryNames.append(row[11])
+    all_librarynames = sorted(set(LibraryNames))
+    logger.info("Detected the following LibraryNames:")
+    logger.info(f"{all_librarynames}")
+    return expand(
+        Path(outdir, "{LibraryName}.r{r}.fastq.gz"),
+        LibraryName=all_librarynames,
+        r=[1, 2],
+    )
+
+
+###########
+# GLOBALS #
+###########
+
+# containers
+bbmap = "docker://quay.io/biocontainers/bbmap:39.01--h92535d8_1"
+entrez = "docker://quay.io/biocontainers/entrez-direct:16.2--he881be0_1"
+python = "docker://python:3.10.13"
+sratools = "docker://quay.io/biocontainers/sra-tools:3.0.8--h9f5acd7_0"
+
+# set up directories
+outdir = Path(config["outdir"] if "outdir" in config else ".")
+logger.debug(f"outdir: {outdir}")
+logdir = Path(outdir, "logs")
+
+# catch input
+accession = config["accession"]
+logger.info(f"bpdownload: accession {accession}")
+
+# set up a temporary directory for this run
+try:
+    run_tmpdir = config["run_tmpdir"]
+    logger.info(f"Caught run_tmpdir {run_tmpdir}")
+except KeyError as e:
+    logger.info(f"{e} not set in config")
+    run_tmpdir = tempfile.mkdtemp()
+    logger.info(f"Setting run_tmpdir to {run_tmpdir}")
+    logger.warning("This probably won't work on a cluster!")
+
+# snakemake's downloader
+HTTP = HTTPRemoteProvider()
+
+logger.warning(
+    f"Snakemake will check the remote files for {accession}. This can be quite slow."
+)
+
+#########
+# RULES #
+#########
+
+
+checkpoint target:
+    input:
+        # This rule is a checkpoint so you don't need to know the names of the
+        # samples before you download them. See test-workflows/bpdownload.smk
+        # for an example of how to use it.
+        get_bpdownload_output,
+        Path(outdir, "SraRunInfo.xml"),
+        Path(outdir, "SraRunInfo.txt"),
+    output:
+        touch(Path(outdir, "bpdownload.done")),
+
+
+rule repair:
+    input:
+        unpack(get_repair_input),
+    output:
+        r1=Path(outdir, "{LibraryName}.r1.fastq.gz"),
+        r2=Path(outdir, "{LibraryName}.r2.fastq.gz"),
+    log:
+        Path(logdir, "repair", "{LibraryName}.log"),
+    threads: 1
+    resources:
+        time=lambda wildcards, attempt: 15 * (2**attempt),
+        mem_mb=lambda wildcards, attempt: 4e3 * attempt,
+    container:
+        bbmap
+    shell:
+        "repair.sh "
+        "-Xmx{resources.mem_mb}m "
+        "-Xms100m "
+        "in={input.r1} "
+        "in2={input.r2} "
+        "out={output.r1} "
+        "out2={output.r2} "
+        "outs=/dev/null "
+        "zl=9 "
+        "repair=t "
+        "tossbrokenreads=t "
+        "tossjunk=t "
+        "2> {log}"
+
+
+rule split_srafile:
+    input:
+        unpack(get_expt_url),
+    output:
+        r1=Path(run_tmpdir, "{expt}_1.fastq"),
+        r2=Path(run_tmpdir, "{expt}_2.fastq"),
+    params:
+        outdir=lambda wildcards, output: Path(output.r1).parent,
+        tmpdir=lambda wildcards: Path(run_tmpdir, f"tmp.{wildcards.expt}"),
+    log:
+        Path(logdir, "split_srafile.{expt}.log"),
+    threads: 2
+    container:
+        sratools
+    shell:
+        "fasterq-dump "
+        "--outfile {wildcards.expt} "
+        "--outdir {params.outdir} "
+        "--temp {params.tmpdir} "
+        "--threads {threads} "
+        "--details "
+        "--split-files "
+        "--log-level 5 "
+        "{input.url} "
+        "&> {log} "
+
+
+checkpoint parse_run_xml:
+    input:
+        xml=Path(outdir, "SraRunInfo.xml"),
+    output:
+        csv=Path(run_tmpdir, "run_to_url.txt"),
+    container:
+        python
+    script:
+        "scripts/parse_run_xml.py"
+
+
+# this maps SRR numbers to public URLs
+rule get_run_xml:
+    input:
+        Path(outdir, "response.txt"),
+    output:
+        Path(outdir, "SraRunInfo.xml"),
+    log:
+        Path(logdir, "get_run_xml.log"),
+    container:
+        entrez
+    shell:
+        "efetch -format native "
+        "< {input} "
+        "> {output} "
+        "2> {log}"
+
+
+# this maps the SRR numbers to sample names
+checkpoint get_run_info:
+    input:
+        Path(outdir, "response.txt"),
+    output:
+        run_info=Path(outdir, "SraRunInfo.txt"),
+    log:
+        Path(logdir, "get_run_info.log"),
+    container:
+        entrez
+    shell:
+        "efetch -format runinfo "
+        "< {input} "
+        "> {output} "
+        "2> {log}"
+
+
+rule search_by_accession:
+    output:
+        temp(Path(outdir, "response.txt")),
+    params:
+        accession=accession,
+    log:
+        Path(logdir, "search_by_accession.log"),
+    container:
+        entrez
+    shell:
+        "esearch "
+        "-db sra "
+        "-query {params.accession}[bioproject] "
+        "> {output} "
+        "2> {log}"
