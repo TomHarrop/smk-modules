@@ -28,6 +28,13 @@ braker3_config["species_name"] = species_name
 
 config["braker3"] = braker3_config
 
+braker3_snakefile = github(
+    "tomharrop/smk-modules",
+    path="modules/braker3/Snakefile",
+    tag="0.0.35",
+)
+# braker3_snakefile = "../modules/braker3/Snakefile"
+
 
 rule target:
     input:
@@ -36,11 +43,7 @@ rule target:
 
 module braker3:
     snakefile:
-        github(
-            "tomharrop/smk-modules",
-            path="modules/braker3/Snakefile",
-            tag="0.0.31",
-        )
+        braker3_snakefile
     config:
         config["braker3"]
 
