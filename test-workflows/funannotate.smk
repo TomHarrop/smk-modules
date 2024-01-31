@@ -36,6 +36,8 @@ logdir = Path(outdir, "logs")
 # avoid rerunning steps
 run_tmpdir = Path(outdir, "tmp")
 
+# Set interproscan_container to False to disable interproscan
+# if you don't provide gm_key, we'll try to use one from the container
 fa_config = {
     "db_path": db_path,
     "dmnd_db": dmnd_db,
@@ -46,6 +48,9 @@ fa_config = {
     "rnaseq_r2": Path(outdir, "reads", "reads.trimmed.r2.fq.gz"),
     "run_tmpdir": run_tmpdir,
     "species_name": "testspecies",
+    # "interproscan_container": False,
+    "interproscan_container": "interproscan_5.65-97.0_cv2.sif",
+    # "gm_key": Path("test-data", "funannotate", "gm_key_64"),
 }
 
 #########
