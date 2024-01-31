@@ -49,7 +49,7 @@ fa_config = {
     "run_tmpdir": run_tmpdir,
     "species_name": "testspecies",
     # "interproscan_container": False,
-    "interproscan_container": "interproscan_5.65-97.0_cv2.sif",
+    "interproscan_container": "interproscan_5.65-97.0_cv3.sif",
     "gm_key": Path("test-data", "funannotate", "gm_key_64"),
 }
 

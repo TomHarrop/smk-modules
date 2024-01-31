@@ -37,7 +37,7 @@ apptainer exec \
     --containall \
     --cleanenv \
     --writable-tmpfs \
-    docker://ghcr.io/tomharrop/container-funannotate:1.8.15_cv2 \
+    docker://ghcr.io/tomharrop/container-funannotate:1.8.15_cv3 \
         cp -r /usr/local/config ./
 
 mv "${tmpdir}/config" "${AUGUSTUS_CONFIG_PATH}"
@@ -55,7 +55,7 @@ apptainer exec \
     --cleanenv \
     --writable-tmpfs \
     --env AUGUSTUS_CONFIG_PATH="${AUGUSTUS_CONFIG_PATH}" \
-    docker://ghcr.io/tomharrop/container-funannotate:1.8.15_cv2 \
+    docker://ghcr.io/tomharrop/container-funannotate:1.8.15_cv3 \
         funannotate setup \
             -i all \
             -d test-data/funannotate/db
@@ -95,70 +95,8 @@ wget \
 gunzip test-data/funannotate/eggnog/eggnog_proteins.dmnd.gz
 ```
 
-## get the eggnog DB from the container
+## set up interproscan
 
-```bash
-tmpdir="$( mktemp -d )"
-IPR_DIR="$( readlink -f test-data/funannotate/interproscan )"
-
-export JAVA_OPTIONS=-Duser.home=$IPR_DIR
-
-mkdir -p "${IPR_DIR}"
-mkdir -p "${IPR_DIR}/.interproscan-5"
-
-apptainer exec \
-    -B ${tmpdir} \
-    -H ${tmpdir} \
-    --pwd ${tmpdir} \
-    --containall \
-    --cleanenv \
-    --writable-tmpfs \
-    docker://quay.io/biocontainers/interproscan:5.59_91.0--hec16e2b_1 \
-        cp -r /usr/local/share/InterProScan/data \
-        /usr/local/share/InterProScan/interproscan.properties \
-        ./ 
-
-mv "${tmpdir}/data" "${IPR_DIR}/"
-
-sed \
-"s|^\(data.directory=\).*$|\1${IPR_DIR}/data|" \
-"${tmpdir}/interproscan.properties" \
-> "${IPR_DIR}/.interproscan-5/interproscan.properties"
-
-# Run hmmpress on all hmm files in the interproscan directory.
-# This is what setup.py is supposed to do.
-apptainer exec \
-    -B ${IPR_DIR} \
-    -H ${tmpdir} \
-    --pwd ${tmpdir} \
-    --containall \
-    --cleanenv \
-    --writable-tmpfs \
-    --env IPR_DIR=$IPR_DIR \
-    docker://quay.io/biocontainers/interproscan:5.59_91.0--hec16e2b_1 \
-    find ${IPR_DIR}/data -type f -name "*.hmm" \
-    -exec /usr/local/bin/hmmpress {}  \; 
-
-# Test run interproscan
-    --containall \
-    --cleanenv \
-    --writable-tmpfs \
-
-
-apptainer exec \
-    -B ${IPR_DIR} \
-    -B ${PWD} \
-    -H ${tmpdir} \
-    --pwd ${PWD} \
-    --env IPR_DIR=$IPR_DIR \
-    docker://quay.io/biocontainers/interproscan:5.59_91.0--hec16e2b_1 \
-    bash -c '\
-        export _JAVA_OPTIONS=-Duser.home=${IPR_DIR} &&
-        interproscan.sh \
-        -dp \
-        -i test-output/funannotate/funannotate/predict_results/testspecies.proteins.fa \
-        --output-dir test_ipr \
-        --cpu 11 \
-        ' > log.out 2> log.err
-
-```
+The easiest is to build a new interproscan container with the DB included,
+which takes about 10 hours. See
+<https://github.com/TomHarrop/container-interproscan>
