@@ -50,19 +50,19 @@ fa_config = {
     "species_name": "testspecies",
     # "interproscan_container": False,
     "interproscan_container": "interproscan_5.65-97.0_cv2.sif",
-    # "gm_key": Path("test-data", "funannotate", "gm_key_64"),
+    "gm_key": Path("test-data", "funannotate", "gm_key_64"),
 }
 
 #########
 # RULES #
 #########
 
-fa_snakefile = "../modules/funannotate/Snakefile"
-# fa_snakefile = github(
-#     "tomharrop/smk-modules",
-#     path="modules/funannotate/Snakefile",
-#     tag="0.0.34",
-# )
+# fa_snakefile = "../modules/funannotate/Snakefile"
+fa_snakefile = github(
+    "tomharrop/smk-modules",
+    path="modules/funannotate/Snakefile",
+    tag="0.0.36",
+)
 
 
 module funannotate:
