@@ -59,7 +59,23 @@ apptainer exec \
         funannotate setup \
             -i all \
             -d test-data/funannotate/db
+
+apptainer exec \
+    -B ${PWD},${TMPDIR},${AUGUSTUS_CONFIG_PATH} \
+    -H $(mktemp -d) \
+    --pwd ${PWD} \
+    --containall \
+    --cleanenv \
+    --writable-tmpfs \
+    --env AUGUSTUS_CONFIG_PATH="${AUGUSTUS_CONFIG_PATH}" \
+    --env FUNANNOTATE_DB=test-data/funannotate/db \
+    docker://ghcr.io/tomharrop/container-funannotate:1.8.15_cv3 \
+        funannotate setup \
+            -b embryophyta
 ```
+
+
+embryophyta
 
 ## get the eggnog DB
 
