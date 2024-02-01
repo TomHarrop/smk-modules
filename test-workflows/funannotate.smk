@@ -14,7 +14,13 @@ import tempfile
 # GLOBALS #
 ###########
 
-bbmap = "docker://quay.io/biocontainers/bbmap:39.01--h92535d8_1"
+
+# fa_snakefile = "../modules/funannotate/Snakefile"
+fa_snakefile = github(
+    "tomharrop/smk-modules",
+    path="modules/funannotate/Snakefile",
+    tag="0.0.40",
+)
 
 # from http://bioinf.uni-greifswald.de/augustus/datasets/RNAseq.bam
 rnaseq = Path("test-data", "braker3", "RNAseq.bam")
@@ -43,15 +49,17 @@ run_tmpdir = Path(outdir, "tmp")
 ################################################################################
 # Example configuration for the funannotate module
 ################################################################################
+
 # Set interproscan_container to False to disable interproscan. If you don't
 # provide gm_key, the module will try to use one from the container. This will
 # fail if that key has expired.
 #
-# Optional inputs:
+# Optional config keys:
 #   - protein_evidence
 #   - transctipt_evidence
 #   - rnaseq
 #   - min_training_models (default 200, set lower for test data)
+#   - header_length (default 16)
 #
 # Configuring busco:
 #   - run funannotate species to find a list of species for busco_seed_species
@@ -64,6 +72,7 @@ fa_config = {
     "dmnd_db": dmnd_db,
     "eggnog_db": eggnog_db,
     "gm_key": Path("test-data", "funannotate", "gm_key_64"),
+    "header_length": 200,
     # "interproscan_container": False,
     "interproscan_container": "interproscan_5.65-97.0_cv3.sif",
     "min_training_models": 20,
@@ -84,13 +93,6 @@ fa_config = {
 #########
 # RULES #
 #########
-
-# fa_snakefile = "../modules/funannotate/Snakefile"
-fa_snakefile = github(
-    "tomharrop/smk-modules",
-    path="modules/funannotate/Snakefile",
-    tag="0.0.39",
-)
 
 
 module funannotate:
@@ -116,5 +118,6 @@ module split_bamfile:
             "run_tmpdir": Path(outdir, "tmp"),
             "bamfile": rnaseq,
         }
+
 
 use rule * from split_bamfile as split_bamfile_*
