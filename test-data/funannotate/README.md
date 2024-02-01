@@ -74,9 +74,6 @@ apptainer exec \
             -b embryophyta
 ```
 
-
-embryophyta
-
 ## get the eggnog DB
 
 ```bash

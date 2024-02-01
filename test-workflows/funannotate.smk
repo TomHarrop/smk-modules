@@ -41,7 +41,7 @@ logdir = Path(outdir, "logs")
 run_tmpdir = Path(outdir, "tmp")
 
 ################################################################################
-# Example configuration for the funannotate module 
+# Example configuration for the funannotate module
 ################################################################################
 # Set interproscan_container to False to disable interproscan. If you don't
 # provide gm_key, the module will try to use one from the container. This will
@@ -85,12 +85,12 @@ fa_config = {
 # RULES #
 #########
 
-fa_snakefile = "../modules/funannotate/Snakefile"
-# fa_snakefile = github(
-#     "tomharrop/smk-modules",
-#     path="modules/funannotate/Snakefile",
-#     tag="0.0.36",
-# )
+# fa_snakefile = "../modules/funannotate/Snakefile"
+fa_snakefile = github(
+    "tomharrop/smk-modules",
+    path="modules/funannotate/Snakefile",
+    tag="0.0.37",
+)
 
 
 module funannotate:
