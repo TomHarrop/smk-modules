@@ -89,7 +89,7 @@ fa_config = {
 fa_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/funannotate/Snakefile",
-    tag="0.0.37",
+    tag="0.0.39",
 )
 
 
@@ -103,129 +103,18 @@ module funannotate:
 use rule * from funannotate as funannotate_*
 
 
-rule target:
-    input:
-        r1=Path(outdir, "reads", "reads.trimmed.r1.fq.gz"),
-        r2=Path(outdir, "reads", "reads.trimmed.r2.fq.gz"),
+module split_bamfile:
+    snakefile:
+        github(
+            "tomharrop/smk-modules",
+            path="modules/split_bamfile_into_r1_r2/Snakefile",
+            tag="0.0.38",
+        )
+    config:
+        {
+            "outdir": Path(outdir, "reads"),
+            "run_tmpdir": Path(outdir, "tmp"),
+            "bamfile": rnaseq,
+        }
 
-
-# Demonstrate how to split the bamfile into R1 and R2 before running
-# funannotate.
-rule split:
-    input:
-        Path(run_tmpdir, "reads.trimmed.paired.fq"),
-    output:
-        r1=Path(outdir, "reads", "reads.trimmed.r1.fq.gz"),
-        r2=Path(outdir, "reads", "reads.trimmed.r2.fq.gz"),
-    log:
-        Path(logdir, "split.log"),
-    threads: 1
-    resources:
-        time=lambda wildcards, attempt: 10 * attempt,
-        mem_mb=lambda wildcards, attempt: 2e3 * attempt,
-    container:
-        bbmap
-    shell:
-        "reformat.sh "
-        "-Xmx{resources.mem_mb}m "
-        "-Xms100m "
-        "in=stdin.fastq "
-        "int=t "
-        "addcolon=t "
-        "zl=9 "
-        "out={output.r1} "
-        "out2={output.r2} "
-        "< {input} "
-        "2> {log}"
-
-
-rule trim:
-    input:
-        reads=Path(run_tmpdir, "reads.{type}.fq"),
-    output:
-        pipe=pipe(Path(run_tmpdir, "reads.trimmed.{type}.fq")),
-    params:
-        interleaved=lambda wildcards: "t"
-        if wildcards.type == "paired"
-        else "f",
-        adaptors=bbmap_adaptors,
-    log:
-        log=Path(logdir, "trim.{type}.log"),
-        stats=Path(logdir, "trim.{type}.stats.txt"),
-    threads: 2
-    resources:
-        time=lambda wildcards, attempt: 10 * attempt,
-        mem_mb=lambda wildcards, attempt: 2e3 * attempt,
-    container:
-        bbmap
-    shell:
-        "bbduk.sh "
-        "-Xmx{resources.mem_mb}m "
-        "-Xms100m "
-        "threads={threads} "
-        "in={input.reads} "
-        "int={params.interleaved} "
-        "out=stdout.fastq "
-        "outs=/dev/null "
-        "ref={params.adaptors} "
-        "ktrim=r k=23 mink=11 hdist=1 tpe tbo "
-        "forcetrimmod=5 "
-        "stats={log.stats} "
-        ">> {output.pipe} "
-        "2> {log.log} "
-
-
-rule repair:
-    input:
-        Path(run_tmpdir, "reads.fq"),
-    output:
-        out=pipe(Path(run_tmpdir, "reads.paired.fq")),
-        outs=temp(Path(run_tmpdir, "reads.unpaired.fq")),
-    log:
-        Path(logdir, "repair.log"),
-    threads: 1
-    resources:
-        time=lambda wildcards, attempt: 10 * attempt,
-        mem_mb=lambda wildcards, attempt: 4e3 * attempt,
-    container:
-        bbmap
-    shell:
-        "repair.sh "
-        "-Xmx{resources.mem_mb}m "
-        "-Xms100m "
-        "in=stdin.fastq "
-        "int=t "
-        "out=stdout.fastq "
-        "outs={output.outs} "
-        "repair=t "
-        "tossbrokenreads=t "
-        "tossjunk=t "
-        "< {input} "
-        ">> {output.out} "
-        "2> {log}"
-
-
-rule bam2fastq:
-    input:
-        rnaseq,
-    output:
-        pipe=pipe(Path(run_tmpdir, "reads.fq")),
-    log:
-        Path(logdir, "bam2fastq.log"),
-    threads: 1
-    resources:
-        time=lambda wildcards, attempt: 10 * attempt,
-        mem_mb=lambda wildcards, attempt: 4e3 * attempt,
-    container:
-        bbmap
-    shell:
-        "reformat.sh "
-        "-Xmx{resources.mem_mb}m "
-        "-Xms100m "
-        "in={input} "
-        "out=stdout.fq "
-        "trimrname=t "
-        "tossjunk=t "
-        "primaryonly=t "
-        ">> {output.pipe} "
-        "2> {log}"
+use rule * from split_bamfile as split_bamfile_*
