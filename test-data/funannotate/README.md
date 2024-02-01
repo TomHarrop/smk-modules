@@ -2,26 +2,7 @@
 
 ## funnannotate databases
 
-You need to specify AUGUSTUS_CONFIG_PATH to install the databases.
-It's present at `/usr/local/config/` inside the container.1
-Seems to work, but takes ages.
-
-```bash
-apptainer exec \
-    -B ${PWD},${TMPDIR} \
-    -H $(mktemp -d) \
-    --pwd ${PWD} \
-    --containall \
-    --cleanenv \
-    --writable-tmpfs \
-    --env AUGUSTUS_CONFIG_PATH=/usr/local/config \
-    docker://ghcr.io/tomharrop/container-funannotate:1.8.15_cv2 \
-        funannotate setup \
-            -i all \
-            -d test-data/funannotate/db
-```
-
-## get the augustus DB from the container
+### get the augustus DB from the container
 
 It needs to be writable (!) to run some of the tools.
 
@@ -44,6 +25,8 @@ mv "${tmpdir}/config" "${AUGUSTUS_CONFIG_PATH}"
 
 ```
 
+### funannotate setup
+
 Then run funannotate like this:
 
 ```bash
@@ -59,7 +42,12 @@ apptainer exec \
         funannotate setup \
             -i all \
             -d test-data/funannotate/db
+```
 
+Add species for the busco_db manually into the top level of the FUNANNOTATE_DB
+folder, or get funannotate to do it for you like this:
+
+```bash
 apptainer exec \
     -B ${PWD},${TMPDIR},${AUGUSTUS_CONFIG_PATH} \
     -H $(mktemp -d) \
@@ -74,7 +62,7 @@ apptainer exec \
             -b embryophyta
 ```
 
-## get the eggnog DB
+### get the eggnog DB
 
 ```bash
 
