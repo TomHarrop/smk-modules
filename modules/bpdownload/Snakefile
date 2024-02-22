@@ -255,10 +255,11 @@ rule search_by_accession:
         "2> {log}"
 
 
-logger.warning(
-    f"""
+onsuccess:
+    logger.warning(
+        f"""
 get_dict_of_expt_to_url_from_csvfile: {get_dict_of_expt_to_url_from_csvfile.cache_info()}
 get_dict_of_library_to_expt_from_csvfile: {get_dict_of_library_to_expt_from_csvfile.cache_info()}
 get_library_names_from_csvfile: {get_library_names_from_csvfile.cache_info()}
 """
-)
+    )
