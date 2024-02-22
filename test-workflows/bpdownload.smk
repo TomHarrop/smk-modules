@@ -2,7 +2,8 @@
 
 from pathlib import Path
 
-accession = "PRJNA975329"
+# quick to download, but only one sample
+accession = "PRJNA268659"
 
 outdir = Path(
     "test-output",
@@ -36,6 +37,14 @@ rule use_bpdownload_output:
 
 
 # Call the module.
+bpdownload_snakefile = github(
+    "tomharrop/smk-modules",
+    path="modules/bpdownload/Snakefile",
+    tag="0.0.42",
+)
+# bpdownload_snakefile = "../modules/bpdownload/Snakefile"
+
+
 module bpdownload:
     snakefile:
         github(

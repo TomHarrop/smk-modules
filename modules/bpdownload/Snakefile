@@ -4,10 +4,19 @@ from snakemake.logging import logger
 from snakemake.remote.HTTP import RemoteProvider as HTTPRemoteProvider
 import csv
 import tempfile
+import functools
 
 #############
 # FUNCTIONS #
 #############
+
+
+@functools.cache
+def get_dict_of_expt_to_url_from_csvfile(csvfile):
+    with open(csvfile, "rt") as f:
+        reader = csv.reader(open(csvfile))
+        expt_to_url = dict(reader)
+    return expt_to_url
 
 
 def get_expt_url(wildcards):
@@ -16,9 +25,7 @@ def get_expt_url(wildcards):
     This and get_all_expts cause the URL file to be read many times.
     """
     csvfile = checkpoints.parse_run_xml.get(**wildcards).output["csv"]
-    with open(csvfile, "rt") as f:
-        reader = csv.reader(open(csvfile))
-        expt_to_url = dict(reader)
+    expt_to_url = get_dict_of_expt_to_url_from_csvfile(csvfile)
     my_url = expt_to_url[wildcards.expt]
     logger.info(f"Snakemake is checking {my_url}")
     return {
@@ -26,18 +33,24 @@ def get_expt_url(wildcards):
     }
 
 
-def get_repair_input(wildcards):
-    """
-    Map the LibraryName to an expt
-    """
+@functools.cache
+def get_dict_of_library_to_expt_from_csvfile(csvfile):
     LibraryName_to_expt = {}
-    csvfile = checkpoints.get_run_info.get(**wildcards).output["run_info"]
     with open(csvfile, "r") as f:
         reader = csv.reader(f, delimiter=",")
         # skip the header
         next(reader, None)
         for row in reader:
             LibraryName_to_expt[row[11]] = row[0]
+    return LibraryName_to_expt
+
+
+def get_repair_input(wildcards):
+    """
+    Map the LibraryName to an expt
+    """
+    csvfile = checkpoints.get_run_info.get(**wildcards).output["run_info"]
+    LibraryName_to_expt = get_dict_of_library_to_expt_from_csvfile(csvfile)
     my_expt = LibraryName_to_expt[wildcards.LibraryName]
     return {
         "r1": Path(run_tmpdir, f"{my_expt}_1.fastq"),
@@ -45,9 +58,9 @@ def get_repair_input(wildcards):
     }
 
 
-def get_bpdownload_output(wildcards):
+@functools.cache
+def get_library_names_from_csvfile(csvfile):
     LibraryNames = []
-    csvfile = checkpoints.get_run_info.get(**wildcards).output["run_info"]
     with open(csvfile, "r") as f:
         reader = csv.reader(f, delimiter=",")
         # skip the header
@@ -57,6 +70,12 @@ def get_bpdownload_output(wildcards):
     all_librarynames = sorted(set(LibraryNames))
     logger.info("Detected the following LibraryNames:")
     logger.info(f"{all_librarynames}")
+    return all_librarynames
+
+
+def get_bpdownload_output(wildcards):
+    csvfile = checkpoints.get_run_info.get(**wildcards).output["run_info"]
+    all_librarynames = get_library_names_from_csvfile(csvfile)
     return expand(
         Path(outdir, "{LibraryName}.r{r}.fastq.gz"),
         LibraryName=all_librarynames,
@@ -234,3 +253,12 @@ rule search_by_accession:
         "-query {params.accession}[bioproject] "
         "> {output} "
         "2> {log}"
+
+
+logger.warning(
+    f"""
+get_dict_of_expt_to_url_from_csvfile: {get_dict_of_expt_to_url_from_csvfile.cache_info()}
+get_dict_of_library_to_expt_from_csvfile: {get_dict_of_library_to_expt_from_csvfile.cache_info()}
+get_library_names_from_csvfile: {get_library_names_from_csvfile.cache_info()}
+"""
+)
