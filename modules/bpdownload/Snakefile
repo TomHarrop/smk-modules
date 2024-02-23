@@ -33,6 +33,9 @@ def get_expt_url(wildcards):
     }
 
 
+# TODO: The SraRunInfo.txt file has a SINGLE/PAIRED field. Need to deal with
+# single files. We are skipping them by if row[15]=="PAIRED"
+# in get_dict_of_library_to_expt_from_csvfile
 @functools.cache
 def get_dict_of_library_to_expt_from_csvfile(csvfile):
     LibraryName_to_expt = {}
@@ -41,7 +44,12 @@ def get_dict_of_library_to_expt_from_csvfile(csvfile):
         # skip the header
         next(reader, None)
         for row in reader:
-            LibraryName_to_expt[row[11]] = row[0]
+            if row[15] == "PAIRED":
+                LibraryName_to_expt[row[11]] = row[0]
+            else:
+                logger.warning(
+                    f"SINGLE-end SRR files aren't implemented yet.\n{row[0]} ({row[11]}) will be skipped."
+                )
     return LibraryName_to_expt
 
 
@@ -58,24 +66,10 @@ def get_repair_input(wildcards):
     }
 
 
-@functools.cache
-def get_library_names_from_csvfile(csvfile):
-    LibraryNames = []
-    with open(csvfile, "r") as f:
-        reader = csv.reader(f, delimiter=",")
-        # skip the header
-        next(reader, None)
-        for row in reader:
-            LibraryNames.append(row[11])
-    all_librarynames = sorted(set(LibraryNames))
-    logger.info("Detected the following LibraryNames:")
-    logger.info(f"{all_librarynames}")
-    return all_librarynames
-
-
 def get_bpdownload_output(wildcards):
     csvfile = checkpoints.get_run_info.get(**wildcards).output["run_info"]
-    all_librarynames = get_library_names_from_csvfile(csvfile)
+    LibraryName_to_expt = get_dict_of_library_to_expt_from_csvfile(csvfile)
+    all_librarynames = sorted(set(LibraryName_to_expt.keys()))
     return expand(
         Path(outdir, "{LibraryName}.r{r}.fastq.gz"),
         LibraryName=all_librarynames,
@@ -130,10 +124,10 @@ checkpoint target:
         # samples before you download them. See test-workflows/bpdownload.smk
         # for an example of how to use it.
         get_bpdownload_output,
-        Path(outdir, "SraRunInfo.xml"),
-        Path(outdir, "SraRunInfo.txt"),
+        Path(outdir, f"SraRunInfo.{accession}.xml"),
+        Path(outdir, f"SraRunInfo.{accession}.txt"),
     output:
-        touch(Path(outdir, "bpdownload.done")),
+        touch(Path(outdir, f"bpdownload.{accession}.done")),
 
 
 rule repair:
@@ -195,9 +189,9 @@ rule split_srafile:
 
 checkpoint parse_run_xml:
     input:
-        xml=Path(outdir, "SraRunInfo.xml"),
+        xml=Path(outdir, f"SraRunInfo.{accession}.xml"),
     output:
-        csv=Path(run_tmpdir, "run_to_url.txt"),
+        csv=Path(run_tmpdir, f"run_to_url.{accession}.txt"),
     container:
         python
     script:
@@ -207,11 +201,11 @@ checkpoint parse_run_xml:
 # this maps SRR numbers to public URLs
 rule get_run_xml:
     input:
-        Path(outdir, "response.txt"),
+        Path(outdir, f"response.{accession}.txt"),
     output:
-        Path(outdir, "SraRunInfo.xml"),
+        Path(outdir, f"SraRunInfo.{accession}.xml"),
     log:
-        Path(logdir, "get_run_xml.log"),
+        Path(logdir, f"get_run_xml.{accession}.log"),
     container:
         entrez
     shell:
@@ -224,11 +218,11 @@ rule get_run_xml:
 # this maps the SRR numbers to sample names
 checkpoint get_run_info:
     input:
-        Path(outdir, "response.txt"),
+        Path(outdir, f"response.{accession}.txt"),
     output:
-        run_info=Path(outdir, "SraRunInfo.txt"),
+        run_info=Path(outdir, f"SraRunInfo.{accession}.txt"),
     log:
-        Path(logdir, "get_run_info.log"),
+        Path(logdir, f"get_run_info.{accession}.log"),
     container:
         entrez
     shell:
@@ -240,11 +234,11 @@ checkpoint get_run_info:
 
 rule search_by_accession:
     output:
-        temp(Path(outdir, "response.txt")),
+        temp(Path(outdir, f"response.{accession}.txt")),
     params:
         accession=accession,
     log:
-        Path(logdir, "search_by_accession.log"),
+        Path(logdir, f"search_by_accession.{accession}.log"),
     container:
         entrez
     shell:
@@ -260,6 +254,14 @@ onsuccess:
         f"""
 get_dict_of_expt_to_url_from_csvfile: {get_dict_of_expt_to_url_from_csvfile.cache_info()}
 get_dict_of_library_to_expt_from_csvfile: {get_dict_of_library_to_expt_from_csvfile.cache_info()}
-get_library_names_from_csvfile: {get_library_names_from_csvfile.cache_info()}
+"""
+    )
+
+
+onerror:
+    logger.warning(
+        f"""
+get_dict_of_expt_to_url_from_csvfile: {get_dict_of_expt_to_url_from_csvfile.cache_info()}
+get_dict_of_library_to_expt_from_csvfile: {get_dict_of_library_to_expt_from_csvfile.cache_info()}
 """
     )
