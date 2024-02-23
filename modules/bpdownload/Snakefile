@@ -34,7 +34,7 @@ def get_expt_url(wildcards):
 
 
 # TODO: The SraRunInfo.txt file has a SINGLE/PAIRED field. Need to deal with
-# single files. We are skipping them by if row[15]=="PAIRED"
+# single files. For now, we are skipping them by checking if row[15]=="PAIRED"
 # in get_dict_of_library_to_expt_from_csvfile
 @functools.cache
 def get_dict_of_library_to_expt_from_csvfile(csvfile):
@@ -250,7 +250,7 @@ rule search_by_accession:
 
 
 onsuccess:
-    logger.warning(
+    logger.debug(
         f"""
 get_dict_of_expt_to_url_from_csvfile: {get_dict_of_expt_to_url_from_csvfile.cache_info()}
 get_dict_of_library_to_expt_from_csvfile: {get_dict_of_library_to_expt_from_csvfile.cache_info()}
@@ -259,7 +259,7 @@ get_dict_of_library_to_expt_from_csvfile: {get_dict_of_library_to_expt_from_csvf
 
 
 onerror:
-    logger.warning(
+    logger.debug(
         f"""
 get_dict_of_expt_to_url_from_csvfile: {get_dict_of_expt_to_url_from_csvfile.cache_info()}
 get_dict_of_library_to_expt_from_csvfile: {get_dict_of_library_to_expt_from_csvfile.cache_info()}

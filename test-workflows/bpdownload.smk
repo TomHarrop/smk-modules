@@ -3,10 +3,10 @@
 from pathlib import Path
 
 # quick to download, but only one sample
-# accession = "PRJNA268659"
+accession = "PRJNA268659"
 
 # a ton of small samples
-accession = "PRJNA307264"
+# accession = "PRJNA307264"
 
 outdir = Path(
     "test-output",
@@ -40,12 +40,12 @@ rule use_bpdownload_output:
 
 
 # Call the module.
-# bpdownload_snakefile = github(
-#     "tomharrop/smk-modules",
-#     path="modules/bpdownload/Snakefile",
-#     tag="0.0.42",
-# )
-bpdownload_snakefile = "../modules/bpdownload/Snakefile"
+bpdownload_snakefile = github(
+    "tomharrop/smk-modules",
+    path="modules/bpdownload/Snakefile",
+    tag="0.0.42",
+)
+# bpdownload_snakefile = "../modules/bpdownload/Snakefile"
 
 
 module bpdownload:
