@@ -15,28 +15,34 @@ output_directory = Path(
 samples = pd.read_csv(sample_data, index_col="name")
 all_samples = sorted(set(samples.index))
 
-# configure the run like this, or in a yaml file
-if "hybpiper" not in config.keys():
-    config["hybpiper"] = {}
 
-hybpiper_config = config["hybpiper"]
-hybpiper_config["run_tmpdir"] = tempfile.mkdtemp()
-hybpiper_config["sample_list"] = all_samples
-hybpiper_config["read_directory"] = read_directory
-hybpiper_config["target_file"] = target_file
-hybpiper_config["outdir"] = output_directory
-config["hybpiper"] = hybpiper_config
+hybpiper_snakefile = github(
+    "tomharrop/smk-modules",
+    path="modules/hybpiper/Snakefile",
+    tag="0.0.43",
+)
+# hybpiper_snakefile = "../modules/hybpiper/Snakefile"
 
 
 module hybpiper:
     snakefile:
-        github(
-            "tomharrop/smk-modules",
-            path="modules/hybpiper/Snakefile",
-            tag="0.0.17",
-        )
+        hybpiper_snakefile
     config:
-        config["hybpiper"]
+        {
+            "namelist": Path("test-data", "hybpiper", "namelist.txt"),
+            "outdir": output_directory,
+            "read_directory": read_directory,
+            "run_tmpdir": Path(output_directory, "tmp"),
+            "target_file": target_file,
+        }
 
 
-use rule * from hybpiper
+use rule * from hybpiper as hybpiper_*
+
+
+checkpoint generate_namelist:
+    output:
+        Path("test-data", "hybpiper", "namelist.txt"),
+    run:
+        with open(output[0], "wt") as f:
+            f.write("\n".join(all_samples))

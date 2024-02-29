@@ -3,7 +3,7 @@
 import re
 import tempfile
 from snakemake.logging import logger
-
+from functools import cache
 
 #############
 # FUNCTIONS #
@@ -30,9 +30,27 @@ def resolve_output(wildcards, output):
     return output_dict
 
 
+@cache
 def sample_name_sanitiser(sample_name):
     if re.compile("[^a-zA-Z0-9_-]").search(sample_name):
         raise ValueError(f"{sample_name} contains special character(s)")
+
+
+@cache
+def read_namelist(namelist):
+    with open(namelist, "rt") as f:
+        return sorted(set(x.rstrip("\n") for x in f.readlines()))
+
+
+def get_sample_list(wildcards):
+    namelist_file = checkpoints.collect_namelist.get(**wildcards).output[0]
+    return read_namelist(namelist_file)
+
+
+def get_sample_files(wildcards):
+    return expand(
+        Path(run_tmpdir, "{sample}"), sample=get_sample_list(wildcards)
+    )
 
 
 ###########
@@ -61,10 +79,14 @@ except KeyError as e:
     logger.warning("This probably won't work on a cluster!")
 
 
-# catch samples
-all_samples = sorted(set(config["sample_list"]))
-logger.debug("Caught sample list:")
-logger.debug(all_samples)
+# catch samples and
+namelist = config["namelist"]
+logger.debug(f"Caught namelist: {namelist}")
+# This was to make sure nothing crazy happens with sample names. But we can't
+# do this if we are reading the namelist as a checkpoint.
+# wildcard_constraints:
+#     sample="|".join(read_samples_from_namelist(namelist)),
+
 
 # catch read directory
 read_directory = config["read_directory"]
@@ -75,15 +97,8 @@ target_file = config["target_file"]
 logger.debug(f"Caught target_file: {target_file}")
 tmp_target_file = Path(run_tmpdir, "targetfile.fasta")
 
-# define outputs
-namelist = Path(outdir, "namelist.txt")
 
 fixed_tf = Path(outdir, "target_file.fixed.fasta")
-
-
-# make sure nothing crazy happens with sample names
-wildcard_constraints:
-    sample="|".join(all_samples),
 
 
 ############
@@ -112,7 +127,7 @@ rule target:
 # parameter to the call to snakemake, because TMPDIRs are interpreted at
 # runtime. This would mean that worker nodes get a different run_tmpdir if
 # tempfile.mkdtemp() is used in the Snakefile.
-rule archive_hybpiper_sequences:
+rule archive_sequences:
     input:
         folder=Path(run_tmpdir, "sequences.{type}"),
     output:
@@ -132,7 +147,7 @@ rule archive_hybpiper_sequences:
         "> {params[0][tarfile]} "
 
 
-rule archive_hybpiper_paralogs:
+rule archive_paralogs:
     input:
         folder=Path(run_tmpdir, "paralogs.{type}"),
     output:
@@ -152,11 +167,11 @@ rule archive_hybpiper_paralogs:
         "> {params[0][tarfile]} "
 
 
-rule hybpiper_retrieve_paralogs:
+rule retrieve_paralogs:
     input:
         target=fixed_tf,
         namelist=namelist,
-        sample_files=expand(Path(run_tmpdir, "{sample}"), sample=all_samples),
+        sample_files=get_sample_files,
     output:
         all_dir=temporary(directory(Path(run_tmpdir, "paralogs.all"))),
         nochimeras_dir=temporary(
@@ -199,11 +214,11 @@ rule hybpiper_retrieve_paralogs:
         "{params[1][heatmap]} "
 
 
-rule hybpiper_retrieve_sequences:
+rule retrieve_sequences:
     input:
         target=fixed_tf,
         namelist=namelist,
-        sample_files=expand(Path(run_tmpdir, "{sample}"), sample=all_samples),
+        sample_files=get_sample_files,
     output:
         fasta_dir=temporary(directory(Path(run_tmpdir, "sequences.{type}"))),
     params:
@@ -228,11 +243,11 @@ rule hybpiper_retrieve_sequences:
         "&> {log} "
 
 
-rule hybpiper_stats:
+rule stats:
     input:
         target=fixed_tf,
         namelist=namelist,
-        sample_files=expand(Path(run_tmpdir, "{sample}"), sample=all_samples),
+        sample_files=get_sample_files,
     output:
         seq_lengths=Path(outdir, "seq_lengths.{type}.tsv"),
         stats=Path(outdir, "hybpiper_stats.{type}.tsv"),
@@ -264,7 +279,7 @@ rule hybpiper_stats:
         "&& mv seq_lengths.{wildcards.type}.tsv {params[1][seq_lengths]} "
 
 
-rule unarchive_hybpiper_results:
+rule unarchive_results:
     input:
         tarfile=Path(outdir, "assemble", "{sample}.tar.gz"),
     output:
@@ -283,7 +298,7 @@ rule unarchive_hybpiper_results:
 
 
 # Run hybpiper and compress the resuilts
-rule hybpiper_pigz:
+rule pigz:
     input:
         Path(run_tmpdir, "assemble", "{sample}.tar"),
     output:
@@ -297,7 +312,12 @@ rule hybpiper_pigz:
         "pigz -p {threads} -9 > {output} < {input} "
 
 
-rule hybpiper_assemble:
+# Hybpiper chokes on empty fastq files so we only add unpaired if it has reads
+# in it. At the end, we touch the paralog file. This is required because the
+# paralog pipeline won't even run without this file in every sample directory.
+# Most real samples have the file and touching it is harmless.  Finally, we
+# generate a tar file to deal with the massive number of output files.
+rule assemble:
     input:
         r1=Path(read_directory, "{sample}.r1.fastq.gz"),
         r2=Path(read_directory, "{sample}.r2.fastq.gz"),
@@ -340,22 +360,13 @@ rule hybpiper_assemble:
         "{wildcards.sample}/"
         "{wildcards.sample}"
         "_genes_derived_from_putative_chimeric_stitched_contig.csv"
-
-
         "; "
         "tar -cv {wildcards.sample} >> {params[1][tarfile]} "
         "2>> {log.hybpiper} "
-        # hybpiper chokes on empty fastq files. Only add unpaired if it has reads
-        # in it.
-        # Touch the paralog file. This is required because the paralog pipeline
-        # won't even run without this file in every sample directory. Most real
-        # samples should have the file so touching it is harmless.
-        # the amount of temp files chew through scratch quota
-        # try to output to a tar.gz
 
 
 # fix the targetfile
-rule hybpiper_fix_targetfile:
+rule fix_targetfile:
     input:
         target=tmp_target_file,
         ctl=Path(run_tmpdir, "check", "fix_targetfile.ctl"),
@@ -393,7 +404,7 @@ rule hybpiper_fix_targetfile:
         "cp fix_targetfile_report.tsv {params[1][report]} "
 
 
-rule hybpiper_check_targetfile:
+rule check_targetfile:
     input:
         target=tmp_target_file,
     output:
@@ -443,9 +454,12 @@ rule collect_targetfile:
         "2>{log}"
 
 
-rule generate_namelist:
-    output:
+checkpoint collect_namelist:
+    input:
         namelist,
-    run:
-        with open(output[0], "wt") as f:
-            f.write("\n".join(all_samples))
+    output:
+        Path(outdir, "namelist.txt"),
+    shell:
+        "ln -s "
+        "$( readlink -f {input} ) "
+        "$( readlink -f {output} ) "
