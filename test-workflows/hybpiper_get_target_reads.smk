@@ -11,12 +11,12 @@ Path("data", "read_files")
 run_tmpdir = Path(test_outdir, "tmp")
 
 
-# my_snakefile = github(
-#     "tomharrop/smk-modules",
-#     path="modules/hybpiper_get_target_reads/Snakefile",
-#     tag="0.0.33",
-# )
-my_snakefile = "../modules/hybpiper_get_target_reads/Snakefile"
+my_snakefile = github(
+    "tomharrop/smk-modules",
+    path="modules/hybpiper_get_target_reads/Snakefile",
+    tag="0.0.44",
+)
+# my_snakefile = "../modules/hybpiper_get_target_reads/Snakefile"
 
 
 all_samples = sorted(
