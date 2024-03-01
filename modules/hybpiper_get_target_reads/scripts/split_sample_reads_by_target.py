@@ -2,23 +2,26 @@
 
 from Bio import SeqIO
 from pathlib import Path
+import gzip
 import logging
+
 
 def fastq_streamer(read_file, handles):
     """
     Iterate through the reads. Look up each read id in the handles dict, and
     write it to the appropriate file.
     """
-    fastq_iterator = SeqIO.parse(read_file, "fastq")
-    for seq_rec in fastq_iterator:
-        try:
-            write_targets = read_to_target[seq_rec.id]
-            for write_target in write_targets:
-                SeqIO.write(seq_rec, handles[write_target], "fastq")
-        except KeyError as e:
-            logging.debug(f"Read {seq_rec.id} skipped")
-    for handle in handles.values():
-        handle.close()
+    with gzip.open(read_file, "rt") as handle:
+        fastq_iterator = SeqIO.parse(handle, "fastq")
+        for seq_rec in fastq_iterator:
+            try:
+                write_targets = read_to_target[seq_rec.id]
+                for write_target in write_targets:
+                    SeqIO.write(seq_rec, handles[write_target], "fastq")
+            except KeyError as e:
+                logging.debug(f"Read {seq_rec.id} skipped")
+        for handle in handles.values():
+            handle.close()
 
 
 # inputs

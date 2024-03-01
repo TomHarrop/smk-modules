@@ -1,0 +1,292 @@
+#!/usr/bin/env python3
+
+from functools import cache
+from pathlib import Path
+from snakemake.logging import logger
+import tempfile
+from snakemake.io import expand
+
+
+#############
+# FUNCTIONS #
+#############
+
+
+@cache
+def get_fastafile_for_readlist(wildcards):
+    my_folder = get_output_from_unarchive_hybpiper_results(wildcards)
+    return Path(
+        f"{my_folder}",
+        "{target}",
+        "{target}_interleaved.fasta",
+    )
+
+
+@cache
+def get_list_of_readfiles_per_sample(wildcards):
+    targets = get_list_of_targets_from_wildcards(wildcards)
+    return expand(
+        Path(
+            outdir,
+            "readfiles_split_by_target",
+            "{target}",
+            f"{wildcards.sample}.{{readset}}.fastq.gz",
+        ),
+        target=targets,
+        readset=["r1", "r2"],
+    )
+
+
+@cache
+def get_list_of_targets_from_file_list(file_list):
+    """
+    This is cached to avoid reading the file_list n times for n targets.
+    """
+    with open(file_list, "rt") as f:
+        file_names = [line.rstrip() for line in f]
+    return sorted(set(Path(x).parent.name for x in file_names))
+
+
+@cache
+def get_list_of_targets_from_wildcards(wildcards):
+    """
+    This function pings the checkpoint, and then reads the file_list when the
+    checkpoint is finished. Calls to get_target_from_file_list are cached.
+    """
+    file_list = checkpoints.get_list_of_fasta_files.get(**wildcards).output[
+        "file_list"
+    ]
+    targets = get_list_of_targets_from_file_list(file_list)
+    return targets
+
+
+@cache
+def get_output_from_unarchive_hybpiper_results(wildcards):
+    return checkpoints.unarchive_hybpiper_results.get(**wildcards).output[
+        "folder"
+    ]
+
+
+@cache
+def get_read_lists_per_sample(wildcards):
+    targets = get_list_of_targets_from_wildcards(wildcards)
+    return {
+        "read_lists": snakemake.io.expand(
+            Path(
+                outdir,
+                "sample_files",
+                "{{sample}}",
+                "targets",
+                "{target}_reads.txt",
+            ).as_posix(),
+            target=targets,
+        )
+    }
+
+
+@cache
+def get_split_read_files(wildcards):
+    my_outdir = checkpoints.split_sample_reads_by_target.get(
+        **wildcards
+    ).output["outdir"]
+    return {
+        "r1": Path(
+            my_outdir,
+            "{target}",
+            "{sample}.r1.fastq",
+        ),
+        "r2": Path(
+            my_outdir,
+            "{target}",
+            "{sample}.r2.fastq",
+        ),
+    }
+
+
+###########
+# GLOBALS #
+###########
+
+# containers
+bbmap = "docker://quay.io/biocontainers/bbmap:39.01--h92535d8_1"
+biopython = "docker://quay.io/biocontainers/biopython:1.78"
+
+
+# set up directories
+outdir = Path(config["outdir"] if "outdir" in config else ".")
+logger.debug(f"outdir: {outdir}")
+logdir = Path(outdir, "logs")
+
+# set up a temporary directory for this run
+try:
+    run_tmpdir = config["run_tmpdir"]
+    logger.info(f"Caught run_tmpdir {run_tmpdir}")
+except KeyError as e:
+    logger.info(f"{e} not set in config")
+    run_tmpdir = tempfile.mkdtemp()
+    logger.info(f"Setting run_tmpdir to {run_tmpdir}")
+    logger.warning("This probably won't work on a cluster!")
+
+archive_directory = config["archive_directory"]
+raw_read_dir = config["raw_read_dir"]
+
+############
+# WORKFLOW #
+############
+
+
+wildcard_constraints:
+    sample="[a-zA-Z0-9_-]+",
+
+
+rule target:
+    input:
+        get_list_of_readfiles_per_sample,
+    output:
+        touch(
+            Path(
+                outdir,
+                "sample_files",
+                "{sample}",
+                "{sample}.done",
+            )
+        ),
+
+
+rule repair_split_sample_reads:
+    input:
+        unpack(get_split_read_files),
+    output:
+        r1=Path(
+            outdir,
+            "readfiles_split_by_target",
+            "{target}",
+            "{sample}.r1.fastq.gz",
+        ),
+        r2=Path(
+            outdir,
+            "readfiles_split_by_target",
+            "{target}",
+            "{sample}.r2.fastq.gz",
+        ),
+    log:
+        Path(logdir, "repair_split_sample_reads", "{sample}", "{target}.log"),
+    threads: 1
+    resources:
+        time=lambda wildcards, attempt: 10 * attempt,
+        mem_mb=lambda wildcards, attempt: 4e3 * attempt,
+    # this sometimes core dumps
+    retries: 5
+    container:
+        bbmap
+    shell:
+        "repair.sh "
+        "-Xmx{resources.mem_mb}m "
+        "-Xms100m "
+        "in={input.r1} "
+        "in2={input.r2} "
+        "out={output.r1} "
+        "out2={output.r2} "
+        "zl=9 "
+        "outs=/dev/null "
+        "repair=t "
+        "2> {log}"
+
+
+# This is a checkpoint. The rule needs to run before Snakemake looks for the
+# read files.
+checkpoint split_sample_reads_by_target:
+    input:
+        unpack(get_read_lists_per_sample),
+        r1=Path(raw_read_dir, "{sample}.r1.fastq.gz"),
+        r2=Path(raw_read_dir, "{sample}.r2.fastq.gz"),
+    output:
+        outdir=directory(
+            Path(
+                run_tmpdir,
+                "hybpiper_get_target_reads",
+                "split_sample_reads_by_target",
+                "{sample}",
+            )
+        ),
+    container:
+        biopython
+    script:
+        "scripts/split_sample_reads_by_target.py"
+
+
+rule get_list_of_reads:
+    input:
+        get_fastafile_for_readlist,
+    output:
+        read_list=Path(
+            outdir,
+            "sample_files",
+            "{sample}",
+            "targets",
+            "{target}_reads.txt",
+        ),
+    log:
+        Path(logdir, "get_list_of_reads", "{sample}", "{target}.log"),
+    threads: 1
+    resources:
+        mem_mb=int(1e3),
+        time=1,
+    container:
+        bbmap  # has GNU tar 1.34
+    shell:
+        "grep '^>' "
+        "{input} "
+        "2> {log} "
+        "| sort | uniq "
+        "| cut -d'>' -f2 "
+        "> {output.read_list} "
+        "2>> {log} "
+
+
+# This is a checkpoint. After the job runs, the file_list is read to generate a
+# list of targets for subsequent jobs.
+checkpoint get_list_of_fasta_files:
+    input:
+        get_output_from_unarchive_hybpiper_results,
+    output:
+        file_list=Path(outdir, "sample_files", "{sample}", "file_list.txt"),
+    params:
+        grep_string=".*_interleaved.fasta$",
+    log:
+        Path(logdir, "get_list_of_fasta_files.{sample}.log"),
+    threads: 1
+    resources:
+        mem_mb=int(1e3),
+        time=lambda wildcards, attempt: 1 * (attempt**3),
+    container:
+        bbmap  # has GNU tar 1.34
+    shell:
+        "find "
+        "{input} "
+        "-regex '{params.grep_string}' "
+        "> {output.file_list} "
+        "2> {log}"
+
+
+# NOTE. The output folder should be temp(), but marking it that way prevents
+# snakemake finding the input for get_list_of_fasta_files and
+# get_list_of_reads, which are both paths in the output folder.
+checkpoint unarchive_hybpiper_results:
+    input:
+        tarfile=Path(archive_directory, "{sample}.tar.gz"),
+    output:
+        folder=directory(
+            Path(run_tmpdir, "hybpiper_get_target_reads", "{sample}")
+        ),
+    resources:
+        time=lambda wildcards, attempt: 20 * attempt,
+    container:
+        bbmap  # has GNU tar 1.34
+    shell:
+        "mkdir -p {output.folder} "
+        "&& "
+        "gzip -dc {input.tarfile} "
+        "| tar -xf - "
+        "--strip-components=1 "
+        "-C {output.folder} "
