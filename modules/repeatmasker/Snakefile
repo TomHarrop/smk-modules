@@ -100,7 +100,6 @@ rule rm_mask:
         "-gccalc -xsmall -gff -html "
         "{params.fa} "
         "&> {log} "
-        "mv query.cleaned.fa.masked {output}"
 
 
 rule rm_classify:

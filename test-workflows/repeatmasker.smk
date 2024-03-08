@@ -23,7 +23,7 @@ config["repeatmasker"] = repeatmasker_config
 rm_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/repeatmasker/Snakefile",
-    tag="0.0.45",
+    tag="0.0.46",
 )
 # rm_snakefile = "../modules/repeatmasker/Snakefile"
 
