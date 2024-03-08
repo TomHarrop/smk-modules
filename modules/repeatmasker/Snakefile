@@ -31,7 +31,7 @@ benchdir = Path(logdir, "benchmarks")
 
 # catch query_genome
 query_genome = config["query_genome"]
-rm_output = Path(config["rm_output"])
+rm_output = Path(outdir, "masked.fa.gz")
 
 logger.info(f"Masking query_genome {query_genome}")
 logger.info(f"Writing output to {rm_output}")
@@ -42,7 +42,7 @@ logger.info(f"Writing output to {rm_output}")
 
 
 # collect the output
-rule collect:
+rule target:
     input:
         Path(
             outdir,
