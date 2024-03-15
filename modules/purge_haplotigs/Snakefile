@@ -1,0 +1,190 @@
+#!/usr/bin/env python3
+
+from pathlib import Path
+from snakemake.logging import logger
+import tempfile
+
+
+def resolve_input(wildcards, input):
+    return {key: Path(val).resolve() for key, val in input.items()}
+
+
+def resolve_output(wildcards, output):
+    return {key: Path(val).resolve() for key, val in output.items()}
+
+
+# def get_outdir(wildcards, output):
+#     return Path(output[0]).resolve().parent
+
+
+###########
+# GLOBALS #
+###########
+
+bbmap = "docker://quay.io/biocontainers/bbmap:39.01--h92535d8_1"
+purge_haplotigs = (
+    "docker://quay.io/biocontainers/purge_haplotigs:1.1.3--hdfd78af_0"
+)
+
+# set up directories
+outdir = Path(config["outdir"] if "outdir" in config else ".")
+logger.debug(f"outdir: {outdir}")
+logdir = Path(outdir, "logs")
+benchdir = Path(logdir, "benchmarks")
+
+# set up a temporary directory for this run
+try:
+    run_tmpdir = config["run_tmpdir"]
+    logger.info(f"Caught run_tmpdir {run_tmpdir}")
+except KeyError as e:
+    logger.info(f"{e} not set in config")
+    run_tmpdir = tempfile.mkdtemp()
+    logger.info(f"Setting run_tmpdir to {run_tmpdir}")
+    logger.warning("This probably won't work on a cluster!")
+
+# catch input
+bamfile = config["bamfile"]
+logger.info(f"purge_haplotigs: bamfile {bamfile}")
+contigs = config["contigs"]
+logger.info(f"purge_haplotigs: contigs {contigs}")
+
+# temporary reference files
+contigs_tmp = Path(outdir, "contigs.fa")
+fai_tmp = Path(outdir, "contigs.fa.fai")
+
+# catch params:
+histogram_only = True
+try:
+    cutoffs = config["cutoffs"]
+    histogram_only = False
+except KeyError as e:
+    logger.warning("Cutoffs not supplied, only generating a histogram.")
+
+
+#########
+# RULES #
+#########
+
+if not histogram_only:
+
+    rule purge:
+        input:
+            bam=bamfile,
+            coverage_stats=Path(outdir, "coverage_stats.csv"),
+            genome=contigs_tmp,
+            fai=fai_tmp,
+        output:
+            artefacts=Path(outdir, "artefacts.fa"),
+            contig_associations=Path(outdir, "contig_associations.txt"),
+            curated=Path(outdir, "curated.fa"),
+            haplotigs=Path(outdir, "haplotigs.fa"),
+            reassigned_dotplots=directory(Path(outdir, "reassigned_dotplots")),
+            reassignments=Path(outdir, "reassignments.tsv"),
+            unassigned_dotplots=directory(Path(outdir, "unassigned_dotplots")),
+        params:
+            input=resolve_input,
+            output=resolve_output,
+            wd=Path(run_tmpdir, "purge").resolve(),
+        log:
+            Path(logdir, "purge.log").resolve(),
+        threads: lambda wildcards, attempt: 10 * attempt
+        container:
+            purge_haplotigs
+        shell:
+            "mkdir -p {params.wd} || exit 1 ; "
+            "cd {params.wd} || exit 1 ; "
+            "purge_haplotigs purge "
+            "-genome {params.input[genome]} "
+            "-coverage {params.input[coverage_stats]} "
+            "-bam {params.input[bam]} "
+            "-dotplots "
+            "-threads {threads} "
+            "&> {log} ; "
+            "mv curated.fasta {params.output[curated]} ; "
+            "mv curated.artefacts.fasta {params.output[artefacts]} ; "
+            "mv curated.haplotigs.fasta {params.output[haplotigs]} ; "
+            "mv curated.reassignments.tsv {params.output[reassignments]} ; "
+            "mv curated.contig_associations.log "
+            "{params.output[contig_associations]} ; "
+            "mv dotplots_unassigned_contigs "
+            "{params.output[unassigned_dotplots]} ; "
+            "mv dotplots_reassigned_contigs "
+            "{params.output[reassigned_dotplots]} ; "
+
+    rule cov:
+        input:
+            genome=contigs_tmp,
+            fai=fai_tmp,
+            gencov=Path(outdir, "gencov.tsv"),
+        output:
+            coverage_stats=Path(outdir, "coverage_stats.csv"),
+        params:
+            cutoffs=cutoffs,
+            depth=200,
+            input=resolve_input,
+            output=resolve_output,
+            wd=Path(run_tmpdir, "cov").resolve(),
+        log:
+            Path(logdir, "cov.log").resolve(),
+        threads: 1
+        container:
+            purge_haplotigs
+        shell:
+            "mkdir -p {params.wd} || exit 1 ; "
+            "cd {params.wd} || exit 1 ; "
+            "purge_haplotigs cov "
+            "-in {params.input[gencov]} "
+            "-low {params.cutoffs[low]} "
+            "-mid {params.cutoffs[mid]} "
+            "-high {params.cutoffs[high]} "
+            "&> {log} ; "
+            "mv coverage_stats.csv {params.output[coverage_stats]}"
+
+    onsuccess:
+        logger.warning(f"Unlinking temp files {contigs_tmp} and {fai_tmp}")
+        contigs_tmp.unlink()
+        fai_tmp.unlink()
+
+
+rule hist:
+    input:
+        genome=contigs_tmp,
+        bam=bamfile,
+    output:
+        fai=fai_tmp,
+        hist=Path(outdir, "histogram.png"),
+        gencov=Path(outdir, "gencov.tsv"),
+    params:
+        depth=200,
+        input=resolve_input,
+        output=resolve_output,
+        wd=Path(run_tmpdir, "hist").resolve(),
+    log:
+        Path(logdir, "hist.log").resolve(),
+    threads: lambda wildcards, attempt: 10 * attempt
+    container:
+        purge_haplotigs
+    shell:
+        "mkdir -p {params.wd} || exit 1 ; "
+        "cd {params.wd} || exit 1 ; "
+        "purge_haplotigs hist "
+        "-bam {params.input[bam]} "
+        "-depth {params.depth} "
+        "-genome {params.input[genome]} "
+        "-threads {threads} "
+        "&> {log} ; "
+        "mv *.histogram.{params.depth}.png {params.output[hist]} ;"
+        "mv *.{params.depth}.gencov {params.output[gencov]} ;"
+
+
+rule collect_reference:
+    input:
+        contigs,
+    output:
+        Path(outdir, "contigs.fa"),
+    log:
+        Path(logdir, "collect_reference.log"),
+    container:
+        bbmap
+    shell:
+        "reformat.sh in={input} out={output} 2>{log}"
