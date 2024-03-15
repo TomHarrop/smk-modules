@@ -7,12 +7,12 @@ import tempfile
 # GLOBALS #
 ###########
 
-purge_snakefile = "../modules/purge_haplotigs/Snakefile"
-# purge_snakefile = github(
-#     "tomharrop/smk-modules",
-#     path="modules/purge_haplotigs/Snakefile",
-#     tag="0.0.40",
-# )
+# purge_snakefile = "../modules/purge_haplotigs/Snakefile"
+purge_snakefile = github(
+    "tomharrop/smk-modules",
+    path="modules/purge_haplotigs/Snakefile",
+    tag="0.0.47",
+)
 
 
 # from https://bitbucket.org/mroachawri/purge_haplotigs/src/master/test/

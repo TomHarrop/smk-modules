@@ -13,10 +13,6 @@ def resolve_output(wildcards, output):
     return {key: Path(val).resolve() for key, val in output.items()}
 
 
-# def get_outdir(wildcards, output):
-#     return Path(output[0]).resolve().parent
-
-
 ###########
 # GLOBALS #
 ###########
