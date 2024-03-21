@@ -86,7 +86,9 @@ logger.debug(f"Caught namelist: {namelist}")
 # do this if we are reading the namelist as a checkpoint.
 # wildcard_constraints:
 #     sample="|".join(read_samples_from_namelist(namelist)),
-
+# Instead, use the allowed characters a la tcdemux
+wildcard_constraints:
+    sample="[a-zA-Z0-9_-]+"
 
 # catch read directory
 read_directory = config["read_directory"]

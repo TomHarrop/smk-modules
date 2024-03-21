@@ -19,7 +19,7 @@ all_samples = sorted(set(samples.index))
 hybpiper_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/hybpiper/Snakefile",
-    tag="0.0.43",
+    tag="0.0.48",
 )
 # hybpiper_snakefile = "../modules/hybpiper/Snakefile"
 
