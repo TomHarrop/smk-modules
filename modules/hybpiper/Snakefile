@@ -10,26 +10,6 @@ from functools import cache
 #############
 
 
-def resolve_input(wildcards, input):
-    output_dict = {}
-    for key, value in input.items():
-        try:
-            output_dict[key] = Path(value).resolve()
-        except TypeError as e:
-            logger.debug(f"Not trying to resolve {key}")
-    return output_dict
-
-
-def resolve_output(wildcards, output):
-    output_dict = {}
-    for key, value in output.items():
-        try:
-            output_dict[key] = Path(value).resolve()
-        except TypeError as e:
-            logger.debug(f"Not trying to resolve {key}")
-    return output_dict
-
-
 @cache
 def sample_name_sanitiser(sample_name):
     if re.compile("[^a-zA-Z0-9_-]").search(sample_name):
@@ -82,13 +62,16 @@ except KeyError as e:
 # catch samples and
 namelist = config["namelist"]
 logger.debug(f"Caught namelist: {namelist}")
+
+
 # This was to make sure nothing crazy happens with sample names. But we can't
 # do this if we are reading the namelist as a checkpoint.
 # wildcard_constraints:
 #     sample="|".join(read_samples_from_namelist(namelist)),
 # Instead, use the allowed characters a la tcdemux
 wildcard_constraints:
-    sample="[a-zA-Z0-9_-]+"
+    sample="[a-zA-Z0-9_-]+",
+
 
 # catch read directory
 read_directory = config["read_directory"]
@@ -101,6 +84,16 @@ tmp_target_file = Path(run_tmpdir, "targetfile.fasta")
 
 
 fixed_tf = Path(outdir, "target_file.fixed.fasta")
+
+
+# This code block links the sample files in input.sample_files into the cwd so
+# that hybpiper can find them using the namelist. Use it with "shallow:
+# minimal" and make sure you set up the parent param.
+link_sample_folders = (
+    "while IFS= read -r sample; "
+    'do ln -s "{params.parent}/${{sample}}" "./${{sample}}"; '
+    "done < {input.namelist} ; "
+)
 
 
 ############
@@ -129,163 +122,142 @@ rule target:
 # parameter to the call to snakemake, because TMPDIRs are interpreted at
 # runtime. This would mean that worker nodes get a different run_tmpdir if
 # tempfile.mkdtemp() is used in the Snakefile.
-rule archive_sequences:
+rule archive_results:
     input:
-        folder=Path(run_tmpdir, "sequences.{type}"),
+        folder=Path(run_tmpdir, "{result}.{type}"),
     output:
-        tarfile=Path(outdir, "sequences.{type}.tar.gz"),
-    params:
-        resolve_output,
+        tarfile=Path(outdir, "{result}.{type}.tar.gz"),
     threads: lambda wildcards, attempt: 4 * attempt
     resources:
         time=lambda wildcards, attempt: 20 * attempt,
     container:
         pigz
     shell:
-        "cd {input.folder} || exit 1 "
-        "&& "
-        "tar -cf - . "
+        "tar -cf - --directory={input.folder} . "
         "| pigz -p {threads} -9 "
-        "> {params[0][tarfile]} "
-
-
-rule archive_paralogs:
-    input:
-        folder=Path(run_tmpdir, "paralogs.{type}"),
-    output:
-        tarfile=Path(outdir, "paralogs.{type}.tar.gz"),
-    params:
-        resolve_output,
-    threads: lambda wildcards, attempt: 4 * attempt
-    resources:
-        time=lambda wildcards, attempt: 20 * attempt,
-    container:
-        pigz
-    shell:
-        "cd {input.folder} || exit 1 "
-        "&& "
-        "tar -cf - . "
-        "| pigz -p {threads} -9 "
-        "> {params[0][tarfile]} "
+        "> {output.tarfile} "
 
 
 rule retrieve_paralogs:
     input:
         target=fixed_tf,
-        namelist=namelist,
+        namelist=Path(outdir, "namelist.txt"),
         sample_files=get_sample_files,
     output:
-        all_dir=temporary(directory(Path(run_tmpdir, "paralogs.all"))),
-        nochimeras_dir=temporary(
+        all_dir=temp(directory(Path(run_tmpdir, "paralogs.all"))),
+        nochimeras_dir=temp(
             directory(Path(run_tmpdir, "paralogs.no_chimeras"))
         ),
         paralog_report=Path(outdir, "paralog_report.tsv"),
         paralogs_above_threshold=Path(outdir, "paralogs_above_threshold.txt"),
         heatmap=Path(outdir, "paralog_heatmap.png"),
+    shadow:
+        "minimal"
     params:
-        resolve_input,
-        resolve_output,
-        run_tmpdir=run_tmpdir,
+        parent=lambda wildcards, input: Path(input.sample_files[0]).parent,
     log:
-        Path(logdir, "retrieve_paralogs.log").resolve(),
+        Path(logdir, "retrieve_paralogs.log"),
     benchmark:
-        Path(logdir, "retrieve_paralogs.benchmark.log").resolve()
+        Path(logdir, "retrieve_paralogs.benchmark.log")
     resources:
         time=lambda wildcards, attempt: 120 * attempt,
     container:
         hybpiper
     shell:
-        "cd {params.run_tmpdir} || exit 1 "
-        "&& "
+        f"{link_sample_folders} "
         "hybpiper paralog_retriever "
-        "--targetfile_dna {params[0][target]} "
+        "--targetfile_dna {input.target} "
         "--fasta_dir_all paralogs.all "
         "--fasta_dir_no_chimeras paralogs.no_chimeras "
         "--paralog_report_filename paralog_report "
         "--paralogs_above_threshold_report_filename paralogs_above_threshold "
-        "{params[0][namelist]} "
+        "{input.namelist} "
         "&> {log} "
         "&& "
-        "cp paralog_report.tsv "
-        "{params[1][paralog_report]} "
+        "mv paralog_report.tsv "
+        "{output.paralog_report} "
         "&& "
-        "cp paralogs_above_threshold.txt "
-        "{params[1][paralogs_above_threshold]} "
+        "mv paralogs_above_threshold.txt "
+        "{output.paralogs_above_threshold} "
         "&& "
-        "cp paralog_heatmap.png "
-        "{params[1][heatmap]} "
+        "mv paralog_heatmap.png "
+        "{output.heatmap} "
+        "&& "
+        "mv paralogs.no_chimeras "
+        "{output.nochimeras_dir} "
+        "&& "
+        "mv paralogs.all "
+        "{output.all_dir} "
 
 
 rule retrieve_sequences:
     input:
         target=fixed_tf,
-        namelist=namelist,
+        namelist=Path(outdir, "namelist.txt"),
         sample_files=get_sample_files,
     output:
-        fasta_dir=temporary(directory(Path(run_tmpdir, "sequences.{type}"))),
+        fasta_dir=temp(directory(Path(run_tmpdir, "sequences.{type}"))),
+    shadow:
+        "minimal"
     params:
-        resolve_input,
-        run_tmpdir=run_tmpdir,
+        parent=lambda wildcards, input: Path(input.sample_files[0]).parent,
     log:
-        Path(logdir, "retrieve_sequences.{type}.log").resolve(),
+        Path(logdir, "retrieve_sequences.{type}.log"),
     benchmark:
-        Path(logdir, "retrieve_sequences.{type}.benchmark.log").resolve()
+        Path(logdir, "retrieve_sequences.{type}.benchmark.log")
     resources:
         time=lambda wildcards, attempt: 120 * attempt,
     container:
         hybpiper
     shell:
-        "cd {params.run_tmpdir} || exit 1 "
-        "&& "
+        f"{link_sample_folders} "
         "hybpiper retrieve_sequences "
-        "--targetfile_dna {params[0][target]} "
-        "--sample_names {params[0][namelist]} "
+        "--targetfile_dna {input.target} "
+        "--sample_names {input.namelist} "
         "--fasta_dir sequences.{wildcards.type} "
         "{wildcards.type} "
         "&> {log} "
+        "&& mv sequences.{wildcards.type} {output.fasta_dir} "
 
 
 rule stats:
     input:
         target=fixed_tf,
-        namelist=namelist,
+        namelist=Path(outdir, "namelist.txt"),
         sample_files=get_sample_files,
     output:
         seq_lengths=Path(outdir, "seq_lengths.{type}.tsv"),
         stats=Path(outdir, "hybpiper_stats.{type}.tsv"),
+    shadow:
+        "minimal"
     params:
-        resolve_input,
-        resolve_output,
-        parent=lambda wildcards, input: Path(input.sample_files[0])
-        .resolve()
-        .parent,
+        parent=lambda wildcards, input: Path(input.sample_files[0]).parent,
     log:
-        Path(logdir, "stats.{type}.log").resolve(),
+        Path(logdir, "stats.{type}.log"),
     benchmark:
-        Path(logdir, "stats.{type}.benchmark.log").resolve()
+        Path(logdir, "stats.{type}.benchmark.log")
     resources:
         time=lambda wildcards, attempt: 120 * attempt,
     container:
         hybpiper
     shell:
-        "cd {params.parent} || exit 1 "
-        "&& "
+        f"{link_sample_folders} "
         "hybpiper stats "
-        "--targetfile_dna {params[0][target]} "
+        "--targetfile_dna {input.target} "
         "--stats_filename hybpiper_stats.{wildcards.type} "
         "--seq_lengths_filename seq_lengths.{wildcards.type} "
         "{wildcards.type} "
-        "{params[0][namelist]} "
+        "{input.namelist} "
         "&> {log} "
-        "&& mv hybpiper_stats.{wildcards.type}.tsv {params[1][stats]} "
-        "&& mv seq_lengths.{wildcards.type}.tsv {params[1][seq_lengths]} "
+        "&& mv hybpiper_stats.{wildcards.type}.tsv {output.stats} "
+        "&& mv seq_lengths.{wildcards.type}.tsv {output.seq_lengths} "
 
 
 rule unarchive_results:
     input:
         tarfile=Path(outdir, "assemble", "{sample}.tar.gz"),
     output:
-        folder=temporary(directory(Path(run_tmpdir, "{sample}"))),
+        folder=temp(directory(Path(run_tmpdir, "{sample}"))),
     resources:
         time=lambda wildcards, attempt: 20 * attempt,
     container:
@@ -327,13 +299,12 @@ rule assemble:
         target=fixed_tf,
     output:
         tarfile=temp(Path(run_tmpdir, "assemble", "{sample}.tar")),
-    params:
-        resolve_input,
-        resolve_output,
+    shadow:
+        "minimal"
     log:
-        hybpiper=Path(logdir, "assemble", "{sample}.log").resolve(),
+        Path(logdir, "assemble", "{sample}.log"),
     benchmark:
-        Path(logdir, "assemble", "benchmark.{sample}.log").resolve()
+        Path(logdir, "assemble", "benchmark.{sample}.log")
     threads: lambda wildcards, attempt: 16 * attempt
     resources:
         time=lambda wildcards, attempt: 120 * attempt,
@@ -341,30 +312,26 @@ rule assemble:
     container:
         hybpiper
     shell:
-        "workdir=$( mktemp -d ) "
-        "; "
-        "cd $workdir "
-        "; "
         'unpaired_arg="" '
         "&& "
-        'if [ -s {params[0][unpaired]} ]; then unpaired_arg="--unpaired {params[0][unpaired]} "; fi '
+        'if [ -s {input.unpaired} ]; then unpaired_arg="--unpaired {input.unpaired} "; fi '
         "&& "
         "hybpiper assemble "
-        "--readfiles {params[0][r1]} {params[0][r2]} "
+        "--readfiles {input.r1} {input.r2} "
         "$unpaired_arg"
-        "--targetfile_dna {params[0][target]} "
+        "--targetfile_dna {input.target} "
         "--diamond "
         "--cpu {threads} "
         "--prefix {wildcards.sample} "
-        "&> {log.hybpiper} "
+        "&> {log} "
         "; "
         "touch "
         "{wildcards.sample}/"
         "{wildcards.sample}"
         "_genes_derived_from_putative_chimeric_stitched_contig.csv"
         "; "
-        "tar -cv {wildcards.sample} >> {params[1][tarfile]} "
-        "2>> {log.hybpiper} "
+        "tar -cv {wildcards.sample} >> {output.tarfile} "
+        "2>> {log} "
 
 
 # fix the targetfile
@@ -375,13 +342,12 @@ rule fix_targetfile:
     output:
         target_out=fixed_tf,
         report=Path(logdir, "target_file_report.txt"),
-    params:
-        resolve_input,
-        resolve_output,
+    shadow:
+        "minimal"
     log:
-        Path(logdir, "fix_targetfile.log").resolve(),
+        Path(logdir, "fix_targetfile.log"),
     benchmark:
-        Path(logdir, "fix_targetfile.benchmark.log").resolve()
+        Path(logdir, "fix_targetfile.benchmark.log")
     threads: 1
     resources:
         time=lambda wildcards, attempt: 10 * attempt,
@@ -389,21 +355,15 @@ rule fix_targetfile:
     container:
         hybpiper
     shell:
-        "workdir=$( mktemp -d ) "
-        "; "
-        "cd $workdir "
-        "; "
-        "ln -s {params[0][target]} ./target_file.fasta "
-        "&& "
         "hybpiper fix_targetfile "
-        "--targetfile_dna target_file.fasta "
+        "--targetfile_dna {input.target} "
         "--allow_gene_removal "
-        "{params[0][ctl]} "
+        "{input.ctl} "
         "&> {log} "
         "&& "
-        "cp target_file_fixed.fasta {params[1][target_out]} "
+        "mv targetfile_fixed.fasta {output.target_out} "
         "&& "
-        "cp fix_targetfile_report.tsv {params[1][report]} "
+        "mv fix_targetfile_report.tsv {output.report} "
 
 
 rule check_targetfile:
@@ -411,13 +371,12 @@ rule check_targetfile:
         target=tmp_target_file,
     output:
         ctl=temp(Path(run_tmpdir, "check", "fix_targetfile.ctl")),
-    params:
-        resolve_input,
-        resolve_output,
+    shadow:
+        "minimal"
     log:
-        Path(logdir, "check_targetfile.log").resolve(),
+        Path(logdir, "check_targetfile.log"),
     benchmark:
-        Path(logdir, "check_targetfile.benchmark.log").resolve()
+        Path(logdir, "check_targetfile.benchmark.log")
     threads: 1
     resources:
         time=lambda wildcards, attempt: 10 * attempt,
@@ -425,15 +384,11 @@ rule check_targetfile:
     container:
         hybpiper
     shell:
-        "workdir=$( mktemp -d ) "
-        "; "
-        "cd $workdir "
-        "; "
         "hybpiper check_targetfile "
-        "--targetfile_dna {params[0][target]} "
+        "--targetfile_dna {input.target} "
         "&> {log} "
         "&& "
-        "cp *.ctl {params[1][ctl]} "
+        "cp *.ctl {output.ctl} "
 
 
 # prepare for hybpiper
@@ -456,12 +411,11 @@ rule collect_targetfile:
         "2>{log}"
 
 
+# this is to make sure the namelist ends with a newline
 checkpoint collect_namelist:
     input:
         namelist,
     output:
         Path(outdir, "namelist.txt"),
     shell:
-        "ln -s "
-        "$( readlink -f {input} ) "
-        "$( readlink -f {output} ) "
+        "(cat {input} && echo) > {output}"
