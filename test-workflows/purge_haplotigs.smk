@@ -11,7 +11,7 @@ import tempfile
 purge_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/purge_haplotigs/Snakefile",
-    tag="0.0.47",
+    tag="0.0.50",
 )
 
 

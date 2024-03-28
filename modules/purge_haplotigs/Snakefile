@@ -5,14 +5,6 @@ from snakemake.logging import logger
 import tempfile
 
 
-def resolve_input(wildcards, input):
-    return {key: Path(val).resolve() for key, val in input.items()}
-
-
-def resolve_output(wildcards, output):
-    return {key: Path(val).resolve() for key, val in output.items()}
-
-
 ###########
 # GLOBALS #
 ###########
@@ -77,35 +69,28 @@ if not histogram_only:
             reassigned_dotplots=directory(Path(outdir, "reassigned_dotplots")),
             reassignments=Path(outdir, "reassignments.tsv"),
             unassigned_dotplots=directory(Path(outdir, "unassigned_dotplots")),
-        params:
-            input=resolve_input,
-            output=resolve_output,
-            wd=Path(run_tmpdir, "purge").resolve(),
+        shadow:
+            "minimal"
         log:
-            Path(logdir, "purge.log").resolve(),
+            Path(logdir, "purge.log"),
         threads: lambda wildcards, attempt: 10 * attempt
         container:
             purge_haplotigs
         shell:
-            "mkdir -p {params.wd} || exit 1 ; "
-            "cd {params.wd} || exit 1 ; "
             "purge_haplotigs purge "
-            "-genome {params.input[genome]} "
-            "-coverage {params.input[coverage_stats]} "
-            "-bam {params.input[bam]} "
+            "-genome {input.genome} "
+            "-coverage {input.coverage_stats} "
+            "-bam {input.bam} "
             "-dotplots "
             "-threads {threads} "
             "&> {log} ; "
-            "mv curated.fasta {params.output[curated]} ; "
-            "mv curated.artefacts.fasta {params.output[artefacts]} ; "
-            "mv curated.haplotigs.fasta {params.output[haplotigs]} ; "
-            "mv curated.reassignments.tsv {params.output[reassignments]} ; "
-            "mv curated.contig_associations.log "
-            "{params.output[contig_associations]} ; "
-            "mv dotplots_unassigned_contigs "
-            "{params.output[unassigned_dotplots]} ; "
-            "mv dotplots_reassigned_contigs "
-            "{params.output[reassigned_dotplots]} ; "
+            "mv curated.fasta {output.curated} ; "
+            "mv curated.artefacts.fasta {output.artefacts} ; "
+            "mv curated.haplotigs.fasta {output.haplotigs} ; "
+            "mv curated.reassignments.tsv {output.reassignments} ; "
+            "mv curated.contig_associations.log {output.contig_associations} ; "
+            "mv dotplots_unassigned_contigs {output.unassigned_dotplots} ; "
+            "mv dotplots_reassigned_contigs {output.reassigned_dotplots} "
 
     rule cov:
         input:
@@ -114,27 +99,24 @@ if not histogram_only:
             gencov=Path(outdir, "gencov.tsv"),
         output:
             coverage_stats=Path(outdir, "coverage_stats.csv"),
+        shadow:
+            "minimal"
         params:
             cutoffs=cutoffs,
             depth=200,
-            input=resolve_input,
-            output=resolve_output,
-            wd=Path(run_tmpdir, "cov").resolve(),
         log:
-            Path(logdir, "cov.log").resolve(),
+            Path(logdir, "cov.log"),
         threads: 1
         container:
             purge_haplotigs
         shell:
-            "mkdir -p {params.wd} || exit 1 ; "
-            "cd {params.wd} || exit 1 ; "
             "purge_haplotigs cov "
-            "-in {params.input[gencov]} "
+            "-in {input.gencov} "
             "-low {params.cutoffs[low]} "
             "-mid {params.cutoffs[mid]} "
             "-high {params.cutoffs[high]} "
             "&> {log} ; "
-            "mv coverage_stats.csv {params.output[coverage_stats]}"
+            "mv coverage_stats.csv {output.coverage_stats}"
 
     onsuccess:
         logger.warning(f"Unlinking temp files {contigs_tmp} and {fai_tmp}")
@@ -150,27 +132,24 @@ rule hist:
         fai=fai_tmp,
         hist=Path(outdir, "histogram.png"),
         gencov=Path(outdir, "gencov.tsv"),
+    shadow:
+        "minimal"
     params:
         depth=200,
-        input=resolve_input,
-        output=resolve_output,
-        wd=Path(run_tmpdir, "hist").resolve(),
     log:
-        Path(logdir, "hist.log").resolve(),
+        Path(logdir, "hist.log"),
     threads: lambda wildcards, attempt: 10 * attempt
     container:
         purge_haplotigs
     shell:
-        "mkdir -p {params.wd} || exit 1 ; "
-        "cd {params.wd} || exit 1 ; "
         "purge_haplotigs hist "
-        "-bam {params.input[bam]} "
+        "-bam {input.bam} "
         "-depth {params.depth} "
-        "-genome {params.input[genome]} "
+        "-genome {input.genome} "
         "-threads {threads} "
         "&> {log} ; "
-        "mv *.histogram.{params.depth}.png {params.output[hist]} ;"
-        "mv *.{params.depth}.gencov {params.output[gencov]} ;"
+        "mv *.histogram.{params.depth}.png {output.hist} ;"
+        "mv *.{params.depth}.gencov {output.gencov} ;"
 
 
 rule collect_reference:
