@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+
+import re
+import tempfile
+from snakemake.logging import logger
+from functools import cache
+
+#############
+# FUNCTIONS #
+#############
+
+
+@cache
+def sample_name_sanitiser(sample_name):
+    if re.compile("[^a-zA-Z0-9_-]").search(sample_name):
+        raise ValueError(f"{sample_name} contains special character(s)")
+
+
+@cache
+def read_namelist(namelist):
+    with open(namelist, "rt") as f:
+        return sorted(set(x.rstrip("\n") for x in f.readlines()))
+
+
+def get_sample_list(wildcards):
+    namelist_file = checkpoints.collect_namelist.get(**wildcards).output[0]
+    return read_namelist(namelist_file)
+
+
+def get_sample_files(wildcards):
+    return expand(
+        Path(run_tmpdir, "{sample}"), sample=get_sample_list(wildcards)
+    )
+
+
+###########
+# GLOBALS #
+###########
+
+# containers
+captus = "docker://quay.io/biocontainers/captus:1.0.1--pyhdfd78af_1"
+pigz = "docker://quay.io/biocontainers/pigz:2.3.4"
+bbmap = "docker://quay.io/biocontainers/bbmap:39.01--h92535d8_1"
+
+# set up directories
+outdir = Path(config["outdir"] if "outdir" in config else ".")
+logger.debug(f"outdir: {outdir}")
+logdir = Path(outdir, "logs")
+
+
+# set up a temporary directory for this run
+try:
+    run_tmpdir = config["run_tmpdir"]
+    logger.info(f"Caught run_tmpdir {run_tmpdir}")
+except KeyError as e:
+    logger.info(f"{e} not set in config")
+    run_tmpdir = tempfile.mkdtemp()
+    logger.info(f"Setting run_tmpdir to {run_tmpdir}")
+    logger.warning("This probably won't work on a cluster!")
+
+
+# catch samples and
+all_samples = config["sample_list"]
+logger.info(f"Caught samples: {all_samples}")
+
+
+# Instead, use the allowed characters a la tcdemux
+wildcard_constraints:
+    sample="[a-zA-Z0-9_-]+",
+    read=[1, 2],
+
+
+# catch read directory
+read_directory = config["read_directory"]
+logger.debug(f"Caught read_directory: {read_directory}")
+
+# catch target_file
+target_file = config["target_file"]
+logger.debug(f"Caught target_file: {target_file}")
+
+
+rule target:
+    input:
+        expand(
+            Path(
+                outdir, "03_extractions", "{sample}", "{sample}__captus-ext"
+            ),
+            sample=all_samples,
+        ),
+
+
+rule extract:
+    input:
+        asms=expand(
+            Path(outdir, "03_extract-input", "{sample}__captus-asm"),
+            sample=all_samples,
+        ),
+        target_file=target_file,
+    output:
+        outdir=directory(
+            Path(outdir, "03_extractions", "{sample}", "{sample}__captus-ext")
+        ),
+    params:
+        asms=lambda wildcards, input: Path(input.asms[0]).parent,
+        outdir=lambda wildcards, output: Path(output.outdir).parent,
+    log:
+        Path(logdir, "extract", "{sample}.log"),
+    benchmark:
+        Path(logdir, "extract", "benchmark.{sample}.log")
+    threads: lambda wildcards, attempt: 16 * attempt
+    resources:
+        time=lambda wildcards, attempt: 120 * attempt,
+        mem_mb=lambda wildcards, attempt: int(16e3 * attempt),
+    container:
+        captus
+    shell:
+        "captus_assembly extract "
+        "--captus_assemblies_dir {params.asms} "
+        "--out {params.outdir} "
+        "--nuc_refs {input.target_file} "
+        '--ram "$(( {resources.mem_mb}/1000 ))" '
+        "--threads {threads} "
+        "&> {log}"
+
+
+rule collect_assemblies:
+    input:
+        Path(outdir, "02_assemblies", "{sample}", "{sample}__captus-asm"),
+    output:
+        directory(Path(outdir, "03_extract-input", "{sample}__captus-asm")),
+    shell:
+        "ln -s "
+        '"$( readlink -f {input} )" '
+        '"$( readlink -f {output} )" '
+
+
+rule assemble:
+    input:
+        r1=Path(run_tmpdir, "reads", "{sample}_R1.fastq.gz"),
+        r2=Path(run_tmpdir, "reads", "{sample}_R2.fastq.gz"),
+    output:
+        outdir=directory(
+            Path(outdir, "02_assemblies", "{sample}", "{sample}__captus-asm")
+        ),
+    params:
+        outdir=lambda wildcards, output: Path(output.outdir).parent,
+    log:
+        Path(logdir, "assemble", "{sample}.log"),
+    benchmark:
+        Path(logdir, "assemble", "benchmark.{sample}.log")
+    threads: lambda wildcards, attempt: 16 * attempt
+    resources:
+        time=lambda wildcards, attempt: 120 * attempt,
+        mem_mb=lambda wildcards, attempt: int(16e3 * attempt),
+    container:
+        captus
+    shell:
+        "captus_assembly assemble "
+        "--reads {input.r1} {input.r2} "
+        "--out {params.outdir} "
+        "--tmp_dir " + tempfile.mkdtemp(prefix=run_tmpdir) + " "
+        '--ram "$(( {resources.mem_mb}/1000 ))" '
+        "--threads {threads} "
+        "&> {log}"
+
+
+rule collect_reads:
+    input:
+        Path(read_directory, "{sample}.r{read}.fastq.gz"),
+    output:
+        temp(Path(run_tmpdir, "reads", "{sample}_R{read}.fastq.gz")),
+    shell:
+        "ln -s "
+        '"$( readlink -f {input} )" '
+        '"$( readlink -f {output} )" '
