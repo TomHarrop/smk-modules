@@ -83,7 +83,7 @@ rule target:
             statsfile=statsfiles,
         ),
         Path(outdir, "04_alignments", "captus-assembly_align.report.html"),
-        directory(Path(outdir, "04_alignments", "03_trimmed")),
+        Path(outdir, "04_alignments", "03_trimmed"),
 
 
 rule align:
