@@ -16,31 +16,12 @@ def sample_name_sanitiser(sample_name):
         raise ValueError(f"{sample_name} contains special character(s)")
 
 
-@cache
-def read_namelist(namelist):
-    with open(namelist, "rt") as f:
-        return sorted(set(x.rstrip("\n") for x in f.readlines()))
-
-
-def get_sample_list(wildcards):
-    namelist_file = checkpoints.collect_namelist.get(**wildcards).output[0]
-    return read_namelist(namelist_file)
-
-
-def get_sample_files(wildcards):
-    return expand(
-        Path(run_tmpdir, "{sample}"), sample=get_sample_list(wildcards)
-    )
-
-
 ###########
 # GLOBALS #
 ###########
 
 # containers
-captus = "docker://quay.io/biocontainers/captus:1.0.1--pyhdfd78af_1"
-pigz = "docker://quay.io/biocontainers/pigz:2.3.4"
-bbmap = "docker://quay.io/biocontainers/bbmap:39.01--h92535d8_1"
+captus = "docker://quay.io/biocontainers/captus:1.0.1--pyhdfd78af_2"
 
 # set up directories
 outdir = Path(config["outdir"] if "outdir" in config else ".")
@@ -59,12 +40,16 @@ except KeyError as e:
     logger.warning("This probably won't work on a cluster!")
 
 
-# catch samples and
+# catch samples
 all_samples = config["sample_list"]
 logger.info(f"Caught samples: {all_samples}")
 
 
-# Instead, use the allowed characters a la tcdemux
+# check sample names
+for sample in all_samples:
+    sample_name_sanitiser(sample)
+
+
 wildcard_constraints:
     sample="[a-zA-Z0-9_-]+",
     read=[1, 2],
@@ -78,15 +63,64 @@ logger.debug(f"Caught read_directory: {read_directory}")
 target_file = config["target_file"]
 logger.debug(f"Caught target_file: {target_file}")
 
+# captus outputs
+statsfiles = [
+    "captus-assembly_align.alignments",
+    "captus-assembly_align.paralogs",
+    "captus-assembly_align.samples",
+]
+
+
+#########
+# RULES #
+#########
+
 
 rule target:
     input:
         expand(
-            Path(
-                outdir, "03_extractions", "{sample}", "{sample}__captus-ext"
-            ),
+            Path(outdir, "04_alignments", "{statsfile}.tsv"),
+            statsfile=statsfiles,
+        ),
+        Path(outdir, "04_alignments", "captus-assembly_align.report.html"),
+        directory(Path(outdir, "04_alignments", "03_trimmed")),
+
+
+rule align:
+    input:
+        extrs=expand(
+            Path(outdir, "03_extractions", "{sample}__captus-ext"),
             sample=all_samples,
         ),
+    output:
+        stats=expand(
+            Path(outdir, "04_alignments", "{statsfile}.tsv"),
+            statsfile=statsfiles,
+        ),
+        report=Path(
+            outdir, "04_alignments", "captus-assembly_align.report.html"
+        ),
+        alignments_dir=directory(Path(outdir, "04_alignments", "03_trimmed")),
+    params:
+        extrs=lambda wildcards, input: Path(input.extrs[0]).parent,
+        outdir=lambda wildcards, output: Path(output.report).parent,
+    log:
+        Path(logdir, "align.log"),
+    benchmark:
+        Path(logdir, "benchmark.align.log")
+    threads: lambda wildcards, attempt: 16 * attempt
+    resources:
+        time=lambda wildcards, attempt: 120 * attempt,
+        mem_mb=lambda wildcards, attempt: int(16e3 * attempt),
+    container:
+        captus
+    shell:
+        "captus_assembly align "
+        "--captus_extractions_dir {params.extrs} "
+        "--out {params.outdir} "
+        '--ram "$(( {resources.mem_mb}/1000 ))" '
+        "--threads {threads} "
+        "&> {log}"
 
 
 rule extract:
@@ -98,15 +132,18 @@ rule extract:
         target_file=target_file,
     output:
         outdir=directory(
-            Path(outdir, "03_extractions", "{sample}", "{sample}__captus-ext")
+            expand(
+                Path(outdir, "03_extractions", "{sample}__captus-ext"),
+                sample=all_samples,
+            ),
         ),
     params:
         asms=lambda wildcards, input: Path(input.asms[0]).parent,
-        outdir=lambda wildcards, output: Path(output.outdir).parent,
+        outdir=lambda wildcards, output: Path(output.outdir[0]).parent,
     log:
-        Path(logdir, "extract", "{sample}.log"),
+        Path(logdir, "extract.log"),
     benchmark:
-        Path(logdir, "extract", "benchmark.{sample}.log")
+        Path(logdir, "benchmark.extract.log")
     threads: lambda wildcards, attempt: 16 * attempt
     resources:
         time=lambda wildcards, attempt: 120 * attempt,
@@ -118,6 +155,8 @@ rule extract:
         "--captus_assemblies_dir {params.asms} "
         "--out {params.outdir} "
         "--nuc_refs {input.target_file} "
+        "--cluster_leftovers "
+        "--mmseqs_method easy-cluster "
         '--ram "$(( {resources.mem_mb}/1000 ))" '
         "--threads {threads} "
         "&> {log}"
@@ -158,7 +197,7 @@ rule assemble:
         "captus_assembly assemble "
         "--reads {input.r1} {input.r2} "
         "--out {params.outdir} "
-        "--tmp_dir " + tempfile.mkdtemp(prefix=run_tmpdir) + " "
+        '--tmp_dir "$( mktemp -d -p ' + run_tmpdir.as_posix() + ' )" '
         '--ram "$(( {resources.mem_mb}/1000 ))" '
         "--threads {threads} "
         "&> {log}"
