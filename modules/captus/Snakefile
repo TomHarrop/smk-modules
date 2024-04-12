@@ -42,7 +42,7 @@ except KeyError as e:
 
 # catch samples
 all_samples = config["sample_list"]
-logger.info(f"Caught samples: {all_samples}")
+logger.debug(f"Caught samples: {all_samples}")
 
 
 # check sample names
@@ -69,7 +69,23 @@ statsfiles = [
     "captus-assembly_align.paralogs",
     "captus-assembly_align.samples",
 ]
-
+alignment_dirs = (
+    expand(
+        Path(
+            outdir,
+            "04_alignments",
+            "03_trimmed",
+            "06_informed",
+            "01_coding_NUC",
+            "{alignment_type}",
+        ),
+        alignment_type=[
+            "01_AA",
+            "02_NT",
+            "03_genes",
+        ],
+    ),
+)
 
 #########
 # RULES #
@@ -83,7 +99,7 @@ rule target:
             statsfile=statsfiles,
         ),
         Path(outdir, "04_alignments", "captus-assembly_align.report.html"),
-        Path(outdir, "04_alignments", "03_trimmed"),
+        alignment_dirs,
 
 
 rule align:
@@ -93,6 +109,7 @@ rule align:
             sample=all_samples,
         ),
     output:
+        directory(alignment_dirs),
         stats=expand(
             Path(outdir, "04_alignments", "{statsfile}.tsv"),
             statsfile=statsfiles,
@@ -100,7 +117,6 @@ rule align:
         report=Path(
             outdir, "04_alignments", "captus-assembly_align.report.html"
         ),
-        alignments_dir=directory(Path(outdir, "04_alignments", "03_trimmed")),
     params:
         extrs=lambda wildcards, input: Path(input.extrs[0]).parent,
         outdir=lambda wildcards, output: Path(output.report).parent,
