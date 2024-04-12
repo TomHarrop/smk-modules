@@ -182,7 +182,11 @@ rule collect_assemblies:
     input:
         Path(outdir, "02_assemblies", "{sample}", "{sample}__captus-asm"),
     output:
-        directory(Path(outdir, "03_extract-input", "{sample}__captus-asm")),
+        temp(
+            directory(
+                Path(outdir, "03_extract-input", "{sample}__captus-asm")
+            )
+        ),
     shell:
         "ln -s "
         '"$( readlink -f {input} )" '
