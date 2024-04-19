@@ -147,6 +147,15 @@ rule extract:
         ),
         target_file=target_file,
     output:
+        multiext(
+            Path(
+                outdir, "03_extractions", "captus-assembly_extract"
+            ).as_posix(),
+            ".log",
+            ".refs.json",
+            ".report.html",
+            ".stats.tsv",
+        ),
         outdir=directory(
             expand(
                 Path(outdir, "03_extractions", "{sample}__captus-ext"),
