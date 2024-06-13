@@ -12,7 +12,7 @@ output_directory = Path(
 iqtree_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/iqtree/Snakefile",
-    tag="0.0.56",
+    tag="0.0.57",
 )
 
 

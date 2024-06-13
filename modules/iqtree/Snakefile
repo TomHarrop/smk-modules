@@ -83,6 +83,8 @@ rule iqtree:
         "minimal"
     params:
         seed=14,
+        alignment_directory=alignment_directory,
+        outdir=outdir,
     log:
         Path(logdir, "iqtree.log"),
     resources:
@@ -98,11 +100,11 @@ rule iqtree:
         "-m MFP "
         "-nt {threads} "
         "-p {input.partition_file} "
-        f"-s {alignment_directory} "
+        "-s {params.alignment_directory} "
         "-seed {params.seed} "
         "-wbtl "
         "&> {log} "
-        "&& mv tree.* " + f"{outdir}" + "/"
+        "&& mv tree.* {params.outdir}/"
 
 
 rule generate_nexus_partition_file:
