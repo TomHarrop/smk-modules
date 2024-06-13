@@ -27,6 +27,6 @@ def create_nexus_partition(directory, outfile):
 
 
 if __name__ == "__main__":
-    directory_path = Path(snakemake.input[0]).parent
+    directory_path = Path(snakemake.input["alignment_directory"])
     outfile = snakemake.output[0]
     create_nexus_partition(directory_path, outfile)

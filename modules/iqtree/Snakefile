@@ -110,6 +110,7 @@ rule iqtree:
 rule generate_nexus_partition_file:
     input:
         get_alignments,
+        alignment_directory=alignment_directory,
     output:
         Path(
             outdir,
