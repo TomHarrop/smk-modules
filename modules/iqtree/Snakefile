@@ -1,0 +1,128 @@
+import tempfile
+from snakemake.logging import logger
+from functools import cache
+
+
+#############
+# FUNCTIONS #
+#############
+
+
+@cache
+def get_alignments(wildcards):
+    myfiles = list(
+        y for y in alignment_directory.glob("*") if not y.name.startswith(".")
+    )
+    return myfiles
+
+
+###########
+# GLOBALS #
+###########
+
+# containers
+iqtree = "docker://quay.io/biocontainers/iqtree:2.3.0--h21ec9f0_0"
+python = "docker://python:3.10.14"
+
+# set up directories
+outdir = Path(config["outdir"] if "outdir" in config else ".")
+logger.debug(f"outdir: {outdir}")
+logdir = Path(outdir, "logs")
+
+# set up a temporary directory for this run
+try:
+    run_tmpdir = config["run_tmpdir"]
+    logger.info(f"Caught run_tmpdir {run_tmpdir}")
+except KeyError as e:
+    logger.info(f"{e} not set in config")
+    run_tmpdir = tempfile.mkdtemp()
+    logger.info(f"Setting run_tmpdir to {run_tmpdir}")
+    logger.warning("This probably won't work on a cluster!")
+
+
+# catch alignmnt directory
+alignment_directory = config["alignment_directory"]
+logger.debug(f"Caught alignment_directory: {alignment_directory}")
+
+
+rule target:
+    input:
+        multiext(
+            Path(
+                outdir,
+                "tree",
+            ).as_posix(),
+            ".best_scheme.nex",
+            ".iqtree",
+            ".log",
+            ".mldist",
+            ".treefile",
+        ),
+
+
+rule iqtree:
+    input:
+        alignments=get_alignments,
+        partition_file=Path(
+            outdir,
+            "partitions.nexus",
+        ),
+    output:
+        multiext(
+            Path(
+                outdir,
+                "tree",
+            ).as_posix(),
+            ".best_scheme.nex",
+            ".iqtree",
+            ".log",
+            ".mldist",
+            ".treefile",
+        ),
+    shadow:
+        "minimal"
+    params:
+        seed=14,
+    log:
+        Path(logdir, "iqtree.log"),
+    resources:
+        mem_mb=lambda wildcards, attempt: int(32e3 * attempt),
+        time="7-00",
+    threads: lambda wildcards, attempt: 48 * attempt
+    container:
+        iqtree
+    shell:
+        "iqtree "
+        "--prefix tree "
+        "-alrt 1000 "
+        "-m MFP "
+        "-nt {threads} "
+        "-p {input.partition_file} "
+        f"-s {alignment_directory} "
+        "-seed {params.seed} "
+        "-wbtl "
+        "&> {log} "
+        "&& mv tree.* " + f"{outdir}" + "/"
+
+
+rule generate_nexus_partition_file:
+    input:
+        get_alignments,
+    output:
+        Path(
+            outdir,
+            "partitions.nexus",
+        ),
+    log:
+        Path(
+            logdir,
+            "generate_nexus_partition_file.log",
+        ),
+    resources:
+        mem_mb=int(4e3),
+        time=lambda wildcards, attempt: 20 * attempt,
+    threads: 1
+    container:
+        python
+    script:
+        "scripts/generate_nexus_partition_file.py"
