@@ -8,44 +8,33 @@ output_directory = Path(
     "iqtree",
 )
 
-# iqtree_snakefile = "../modules/iqtree/Snakefile"
-iqtree_snakefile = github(
-    "tomharrop/smk-modules",
-    path="modules/iqtree/Snakefile",
-    tag="0.0.59",
-)
+datasets = [x.name for x in test_alignments.glob("*") if x.is_dir()]
 
-
-module iqtree_captus:
-    snakefile:
-        iqtree_snakefile
-    config:
-        {
-            "alignment_directory": Path(test_alignments, "captus"),
-            "outdir": Path(output_directory, "captus"),
-            "run_tmpdir": Path(output_directory, "tmp", "captus"),
-        }
-
-
-use rule * from iqtree_captus as iqtree_captus_*
-
-
-module iqtree_paragone:
-    snakefile:
-        iqtree_snakefile
-    config:
-        {
-            "alignment_directory": Path(test_alignments, "paragone"),
-            "outdir": Path(output_directory, "paragone"),
-            "run_tmpdir": Path(output_directory, "tmp", "paragone"),
-        }
-
-
-use rule * from iqtree_paragone as iqtree_paragone_*
+iqtree_snakefile = "../modules/iqtree/Snakefile"
+# iqtree_snakefile = github(
+#     "tomharrop/smk-modules",
+#     path="modules/iqtree/Snakefile",
+#     tag="0.0.59",
+# )
 
 
 rule target:
     input:
-        rules.iqtree_paragone_target.input,
-        rules.iqtree_captus_target.input,
-    default_target: True
+        expand(
+            Path(output_directory, "{dataset}", "tree.treefile"),
+            dataset=datasets,
+        ),
+
+
+module iqtree:
+    snakefile:
+        iqtree_snakefile
+    config:
+        {
+            "alignment_directory": Path(test_alignments, "{dataset}"),
+            "outdir": Path(output_directory, "{dataset}"),
+            "run_tmpdir": Path(output_directory, "tmp", "{dataset}"),
+        }
+
+
+use rule * from iqtree as iqtree_*

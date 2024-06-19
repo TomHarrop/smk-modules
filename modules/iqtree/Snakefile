@@ -9,9 +9,22 @@ from functools import cache
 
 
 @cache
+def get_alignment_directory(wildcards):
+    pathfile = checkpoints.generate_nexus_partition_file.get(
+        **wildcards
+    ).output["pathfile"]
+    with open(pathfile, "rt") as f:
+        alignment_directory = f.read()
+    return alignment_directory
+
+
+@cache
 def get_alignments(wildcards):
+    alignment_directory = get_alignment_directory(wildcards)
     myfiles = list(
-        y for y in alignment_directory.glob("*") if not y.name.startswith(".")
+        y
+        for y in Path(alignment_directory).glob("*")
+        if not y.name.startswith(".")
     )
     return myfiles
 
@@ -41,8 +54,8 @@ except KeyError as e:
 
 
 # catch alignmnt directory
-alignment_directory = config["alignment_directory"]
-logger.debug(f"Caught alignment_directory: {alignment_directory}")
+alignment_directory = f"{config['alignment_directory']}"
+logger.info(f"Caught alignment_directory: {alignment_directory}")
 
 
 rule target:
@@ -107,15 +120,20 @@ rule iqtree:
         "&& mv tree.* {params.outdir}/"
 
 
-rule generate_nexus_partition_file:
-    input:
-        get_alignments,
-        alignment_directory=alignment_directory,
+checkpoint generate_nexus_partition_file:
     output:
-        Path(
+        nexus=Path(
             outdir,
             "partitions.nexus",
         ),
+        pathfile=temp(
+            Path(
+                outdir,
+                "pathfile",
+            )
+        ),
+    params:
+        alignment_directory=f"{alignment_directory}",
     log:
         Path(
             logdir,
