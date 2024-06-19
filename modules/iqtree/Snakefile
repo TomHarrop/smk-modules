@@ -72,6 +72,12 @@ rule target:
             ".treefile",
         ),
 
+################
+# FIXME / TODO #
+################
+
+# We need to exclude fasta files with <3 alignments and write a list of
+# excluded files.
 
 rule iqtree:
     input:
