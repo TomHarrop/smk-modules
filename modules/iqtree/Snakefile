@@ -83,8 +83,8 @@ rule iqtree:
         "minimal"
     params:
         seed=14,
-        alignment_directory=alignment_directory,
-        outdir=outdir,
+        alignment_directory=f"{alignment_directory}",
+        outdir=f"{outdir}",
     log:
         Path(logdir, "iqtree.log"),
     resources:
