@@ -19,12 +19,23 @@ def get_alignment_directory(wildcards):
 
 
 @cache
+def get_excluded_samples(wildcards):
+    reportfile = checkpoints.generate_nexus_partition_file.get(
+        **wildcards
+    ).output["report"]
+    with open(reportfile, "rt") as f:
+        excluded_samples = f.read().splitlines()
+    return excluded_samples
+
+
+@cache
 def get_alignments(wildcards):
     alignment_directory = get_alignment_directory(wildcards)
+    excluded_samples = get_excluded_samples(wildcards)
     myfiles = list(
         y
         for y in Path(alignment_directory).glob("*")
-        if not y.name.startswith(".")
+        if not (y.name.startswith(".") or y.as_posix() in excluded_samples)
     )
     return myfiles
 
@@ -36,6 +47,7 @@ def get_alignments(wildcards):
 # containers
 iqtree = "docker://quay.io/biocontainers/iqtree:2.3.0--h21ec9f0_0"
 python = "docker://python:3.10.14"
+biopython = "docker://quay.io/biocontainers/biopython:1.81"
 
 # set up directories
 outdir = Path(config["outdir"] if "outdir" in config else ".")
@@ -72,12 +84,6 @@ rule target:
             ".treefile",
         ),
 
-################
-# FIXME / TODO #
-################
-
-# We need to exclude fasta files with <3 alignments and write a list of
-# excluded files.
 
 rule iqtree:
     input:
@@ -132,6 +138,10 @@ checkpoint generate_nexus_partition_file:
             outdir,
             "partitions.nexus",
         ),
+        report=Path(
+            outdir,
+            "excluded_samples.txt",
+        ),
         pathfile=temp(
             Path(
                 outdir,
@@ -150,6 +160,6 @@ checkpoint generate_nexus_partition_file:
         time=lambda wildcards, attempt: 20 * attempt,
     threads: 1
     container:
-        python
+        biopython
     script:
         "scripts/generate_nexus_partition_file.py"
