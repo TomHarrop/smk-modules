@@ -9,7 +9,6 @@ from functools import cache
 
 
 def get_checkpoint(wildcards):
-    print(wildcards)
     return checkpoints.generate_nexus_partition_file.get(**wildcards)
 
 
@@ -131,6 +130,8 @@ rule iqtree:
 
 
 checkpoint generate_nexus_partition_file:
+    input:
+        alignment_directory=f"{alignment_directory}",
     output:
         nexus=Path(
             outdir,
