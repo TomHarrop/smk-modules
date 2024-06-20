@@ -8,27 +8,25 @@ from functools import cache
 #############
 
 
-@cache
+def get_checkpoint(wildcards):
+    print(wildcards)
+    return checkpoints.generate_nexus_partition_file.get(**wildcards)
+
+
 def get_alignment_directory(wildcards):
-    pathfile = checkpoints.generate_nexus_partition_file.get(
-        **wildcards
-    ).output["pathfile"]
+    pathfile = get_checkpoint(wildcards).output["pathfile"]
     with open(pathfile, "rt") as f:
         alignment_directory = f.read()
     return alignment_directory
 
 
-@cache
 def get_excluded_samples(wildcards):
-    reportfile = checkpoints.generate_nexus_partition_file.get(
-        **wildcards
-    ).output["report"]
+    reportfile = get_checkpoint(wildcards).output["report"]
     with open(reportfile, "rt") as f:
         excluded_samples = f.read().splitlines()
     return excluded_samples
 
 
-@cache
 def get_alignments(wildcards):
     alignment_directory = get_alignment_directory(wildcards)
     excluded_samples = get_excluded_samples(wildcards)
