@@ -8,10 +8,10 @@ accession = "PRJNA268659"
 # a ton of small samples
 # accession = "PRJNA307264"
 
-outdir = Path(
-    "test-output",
-    "bpdownload",
-)
+# an actual dataset of interest
+# accession = "PRJNA549921"
+
+outdir = Path("test-output", "bpdownload", accession)
 
 
 def get_bpdownload_output(wildcards):
@@ -43,7 +43,7 @@ rule use_bpdownload_output:
 bpdownload_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/bpdownload/Snakefile",
-    tag="0.0.42",
+    tag="0.1.03",
 )
 # bpdownload_snakefile = "../modules/bpdownload/Snakefile"
 

@@ -29,7 +29,7 @@ def get_expt_url(wildcards):
     my_url = expt_to_url[wildcards.expt]
     logger.info(f"Snakemake is checking {my_url}")
     return {
-        "url": HTTP.remote(my_url),
+        "url": HTTP.remote(my_url, keep_local=True),
     }
 
 
@@ -44,8 +44,9 @@ def get_dict_of_library_to_expt_from_csvfile(csvfile):
         # skip the header
         next(reader, None)
         for row in reader:
+            library_name = row[0] if row[11] == "" else row[11]
             if row[15] == "PAIRED":
-                LibraryName_to_expt[row[11]] = row[0]
+                LibraryName_to_expt[library_name] = row[0]
             else:
                 logger.warning(
                     f"SINGLE-end SRR files aren't implemented yet.\n{row[0]} ({row[11]}) will be skipped."
@@ -85,7 +86,7 @@ def get_bpdownload_output(wildcards):
 bbmap = "docker://quay.io/biocontainers/bbmap:39.01--h92535d8_1"
 entrez = "docker://quay.io/biocontainers/entrez-direct:16.2--he881be0_1"
 python = "docker://python:3.10.13"
-sratools = "docker://quay.io/biocontainers/sra-tools:3.0.8--h9f5acd7_0"
+sratools = "docker://quay.io/biocontainers/sra-tools:3.1.1--h4304569_0"
 
 # set up directories
 outdir = Path(config["outdir"] if "outdir" in config else ".")
@@ -136,9 +137,11 @@ rule repair:
     output:
         r1=Path(outdir, "{LibraryName}.r1.fastq.gz"),
         r2=Path(outdir, "{LibraryName}.r2.fastq.gz"),
+    params:
+        zip_threads=lambda wilcdards, threads: int(threads // 2),
     log:
         Path(logdir, "repair", "{LibraryName}.log"),
-    threads: 1
+    threads: 4
     resources:
         time=lambda wildcards, attempt: 15 * (2**attempt),
         mem_mb=lambda wildcards, attempt: 4e3 * attempt,
@@ -153,6 +156,7 @@ rule repair:
         "out={output.r1} "
         "out2={output.r2} "
         "outs=/dev/null "
+        "threads={params.zip_threads} "
         "zl=9 "
         "repair=t "
         "tossbrokenreads=t "
@@ -167,24 +171,25 @@ rule split_srafile:
         r1=Path(run_tmpdir, "{expt}_1.fastq"),
         r2=Path(run_tmpdir, "{expt}_2.fastq"),
     params:
-        outdir=lambda wildcards, output: Path(output.r1).parent,
-        tmpdir=lambda wildcards: Path(run_tmpdir, f"tmp.{wildcards.expt}"),
+        outdir=lambda wilcdards, output: Path(output.r1).parent,
     log:
         Path(logdir, "split_srafile.{expt}.log"),
     threads: 2
+    shadow:
+        "minimal"
     container:
         sratools
     shell:
         "fasterq-dump "
         "--outfile {wildcards.expt} "
-        "--outdir {params.outdir} "
-        "--temp {params.tmpdir} "
         "--threads {threads} "
         "--details "
         "--split-files "
-        "--log-level 5 "
+        "--log-level 6 "
+        "--verbose "
         "{input.url} "
         "&> {log} "
+        "&& mv {wildcards.expt}* {params.outdir}/ "
 
 
 checkpoint parse_run_xml:
