@@ -43,7 +43,7 @@ rule use_bpdownload_output:
 bpdownload_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/bpdownload/Snakefile",
-    tag="0.1.03",
+    tag="0.1.04",
 )
 # bpdownload_snakefile = "../modules/bpdownload/Snakefile"
 
