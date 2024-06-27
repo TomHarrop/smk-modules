@@ -91,15 +91,7 @@ alignment_dirs = (
 # RULES #
 #########
 
-
-rule target:
-    input:
-        expand(
-            Path(outdir, "04_alignments", "{statsfile}.tsv"),
-            statsfile=statsfiles,
-        ),
-        Path(outdir, "04_alignments", "captus-assembly_align.report.html"),
-        alignment_dirs,
+# target is defined at the bottom of the workflow
 
 
 rule align:
@@ -241,3 +233,10 @@ rule collect_reads:
         "ln -s "
         '"$( readlink -f {input} )" '
         '"$( readlink -f {output} )" '
+
+
+rule target:
+    input:
+        rules.extract.output,
+        rules.align.output,
+    default_target: True
