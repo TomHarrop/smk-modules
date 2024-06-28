@@ -134,7 +134,7 @@ rule align:
 rule extract:
     input:
         asms=expand(
-            Path(outdir, "03_extract-input", "{sample}__captus-asm"),
+            Path(run_tmpdir, "03_extract-input", "{sample}__captus-asm"),
             sample=all_samples,
         ),
         target_file=target_file,
@@ -172,6 +172,7 @@ rule extract:
         "--captus_assemblies_dir {params.asms} "
         "--out {params.outdir} "
         "--nuc_refs {input.target_file} "
+        "--mit_refs SeedPlantsMIT "
         "--cluster_leftovers "
         "--mmseqs_method easy-cluster "
         '--ram "$(( {resources.mem_mb}/1000 ))" '
@@ -185,7 +186,7 @@ rule collect_assemblies:
     output:
         temp(
             directory(
-                Path(outdir, "03_extract-input", "{sample}__captus-asm")
+                Path(run_tmpdir, "03_extract-input", "{sample}__captus-asm")
             )
         ),
     shell:
