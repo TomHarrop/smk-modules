@@ -17,12 +17,12 @@ all_samples = sorted(
     set(x.stem.split(".")[0] for x in read_directory.glob("*r1.fastq.gz"))
 )
 
-# captus_snakefile = "../modules/captus/Snakefile"
-captus_snakefile = github(
-    "tomharrop/smk-modules",
-    path="modules/captus/Snakefile",
-    tag="0.1.06",
-)
+captus_snakefile = "../modules/captus/Snakefile"
+# captus_snakefile = github(
+#     "tomharrop/smk-modules",
+#     path="modules/captus/Snakefile",
+#     tag="0.1.06",
+# )
 
 
 module captus:
@@ -31,11 +31,12 @@ module captus:
     config:
         {
             "sample_list": all_samples,
-            "outdir": output_directory,
-            "read_directory": read_directory,
-            "run_tmpdir": Path(output_directory, "tmp"),
-            "target_file": target_file,
+            "read_directory": Path(read_directory).resolve(),
+            "run_tmpdir": Path(output_directory, "tmp").resolve(),
+            "target_file": target_file.resolve(),
         }
+    prefix:
+        output_directory
 
 
 use rule * from captus as captus_*

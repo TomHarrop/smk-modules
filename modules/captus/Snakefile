@@ -28,7 +28,6 @@ outdir = Path(config["outdir"] if "outdir" in config else ".")
 logger.debug(f"outdir: {outdir}")
 logdir = Path(outdir, "logs")
 
-
 # set up a temporary directory for this run
 try:
     run_tmpdir = config["run_tmpdir"]
@@ -56,11 +55,11 @@ wildcard_constraints:
 
 
 # catch read directory
-read_directory = config["read_directory"]
+read_directory = Path(config["read_directory"])
 logger.debug(f"Caught read_directory: {read_directory}")
 
 # catch target_file
-target_file = config["target_file"]
+target_file = Path(config["target_file"])
 logger.debug(f"Caught target_file: {target_file}")
 
 # captus outputs
