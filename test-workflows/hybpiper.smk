@@ -16,12 +16,12 @@ samples = pd.read_csv(sample_data, index_col="name")
 all_samples = sorted(set(samples.index))
 
 
-hybpiper_snakefile = github(
-    "tomharrop/smk-modules",
-    path="modules/hybpiper/Snakefile",
-    tag="0.0.49",
-)
-# hybpiper_snakefile = "../modules/hybpiper/Snakefile"
+# hybpiper_snakefile = github(
+#     "tomharrop/smk-modules",
+#     path="modules/hybpiper/Snakefile",
+#     tag="0.1.07",
+# )
+hybpiper_snakefile = "../modules/hybpiper/Snakefile"
 
 
 module hybpiper:

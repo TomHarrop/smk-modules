@@ -42,7 +42,7 @@ def get_alignments(wildcards):
 ###########
 
 # containers
-iqtree = "docker://quay.io/biocontainers/iqtree:2.3.0--h21ec9f0_0"
+iqtree = "docker://quay.io/biocontainers/iqtree:2.3.4--h21ec9f0_0"
 python = "docker://python:3.10.14"
 biopython = "docker://quay.io/biocontainers/biopython:1.81"
 

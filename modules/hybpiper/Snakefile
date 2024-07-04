@@ -38,7 +38,9 @@ def get_sample_files(wildcards):
 ###########
 
 # containers
-hybpiper = "docker://quay.io/biocontainers/hybpiper:2.1.6--h031d066_0"
+# NOTE! Hybpiper 2.1.8--pyhdfd78af_0 fails with NameError: name
+# 'MafftCommandline' is not defined
+hybpiper = "docker://quay.io/biocontainers/hybpiper:2.1.7--pyhdfd78af_0"
 pigz = "docker://quay.io/biocontainers/pigz:2.3.4"
 bbmap = "docker://quay.io/biocontainers/bbmap:39.01--h92535d8_1"
 
@@ -109,6 +111,10 @@ rule target:
         ),
         expand(
             Path(outdir, "hybpiper_stats.{type}.tsv"),
+            type=["gene", "supercontig"],
+        ),
+        expand(
+            Path(outdir, "seq_lengths.{type}.tsv"),
             type=["gene", "supercontig"],
         ),
         expand(
