@@ -32,7 +32,6 @@ module hybpiper:
             "namelist": Path("test-data", "hybpiper", "namelist.txt"),
             "outdir": output_directory,
             "read_directory": read_directory,
-            "run_tmpdir": Path(output_directory, "tmp"),
             "target_file": target_file,
         }
 
