@@ -378,7 +378,7 @@ rule check_targetfile:
         Path(logdir, "check_targetfile.benchmark.log")
     threads: 1
     resources:
-        time=lambda wildcards, attempt: 10 * attempt,
+        time=lambda wildcards, attempt: 20 * attempt,
         mem_mb=lambda wildcards, attempt: 1000 * attempt,
     container:
         hybpiper
