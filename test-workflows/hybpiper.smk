@@ -33,6 +33,7 @@ module hybpiper:
             "outdir": output_directory,
             "read_directory": read_directory,
             "target_file": target_file,
+            # "run_tmpdir": Path(output_directory, "tmp")
         }
 
 
