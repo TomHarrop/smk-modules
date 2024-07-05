@@ -31,12 +31,42 @@ module captus:
     config:
         {
             "sample_list": all_samples,
-            "read_directory": Path(read_directory).resolve(),
-            "run_tmpdir": Path(output_directory, "tmp").resolve(),
-            "target_file": target_file.resolve(),
+            "read_directory": Path("inputs"),
+            "target_file": "targetfile.fasta",
         }
     prefix:
-        output_directory
+        Path("test-output", "captus")
 
 
 use rule * from captus as captus_*
+
+rule set_up_captus_inputs:
+    input:
+        read_directory=read_directory,
+        target_file=target_file,
+    output:
+        reads=expand(
+            Path(
+                "test-output",
+                "captus",
+                "inputs",
+                "{sample}.r{r}.fastq.gz",
+            ),
+            sample=all_samples,
+            r=["1", "2"],
+        ),
+        target_file=Path(
+            "test-output",
+            "captus",
+            "targetfile.fasta",
+        ),
+    params:
+        read_directory=lambda wildcards, output: Path(output.reads[0]).parent,
+    shell:
+        "rm -r {params.read_directory} ; "
+        "ln -s "
+        "$(readlink -f {input.read_directory}) "
+        "$(readlink -f {params.read_directory} ) ; "
+        "ln -s "
+        "$(readlink -f {input.target_file} ) "
+        "$(readlink -f {output.target_file} ) ; "

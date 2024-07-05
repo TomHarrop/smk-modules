@@ -28,21 +28,9 @@ outdir = Path(config["outdir"] if "outdir" in config else ".")
 logger.debug(f"outdir: {outdir}")
 logdir = Path(outdir, "logs")
 
-# set up a temporary directory for this run
-try:
-    run_tmpdir = config["run_tmpdir"]
-    logger.info(f"Caught run_tmpdir {run_tmpdir}")
-except KeyError as e:
-    logger.info(f"{e} not set in config")
-    run_tmpdir = tempfile.mkdtemp()
-    logger.info(f"Setting run_tmpdir to {run_tmpdir}")
-    logger.warning("This probably won't work on a cluster!")
-
-
 # catch samples
 all_samples = config["sample_list"]
 logger.debug(f"Caught samples: {all_samples}")
-
 
 # check sample names
 for sample in all_samples:
@@ -68,8 +56,9 @@ statsfiles = [
     "captus-assembly_align.paralogs",
     "captus-assembly_align.samples",
 ]
-alignment_dirs = (
-    expand(
+alignment_dirs = [
+    f"{x}"
+    for x in expand(
         Path(
             outdir,
             "04_alignments",
@@ -83,8 +72,8 @@ alignment_dirs = (
             "02_NT",
             "03_genes",
         ],
-    ),
-)
+    )
+]
 
 #########
 # RULES #
@@ -133,7 +122,7 @@ rule align:
 rule extract:
     input:
         asms=expand(
-            Path(run_tmpdir, "03_extract-input", "{sample}__captus-asm"),
+            Path("03_extract-input", "{sample}__captus-asm"),
             sample=all_samples,
         ),
         target_file=target_file,
@@ -153,6 +142,8 @@ rule extract:
                 sample=all_samples,
             ),
         ),
+    shadow:
+        "minimal"
     params:
         asms=lambda wildcards, input: Path(input.asms[0]).parent,
         outdir=lambda wildcards, output: Path(output.outdir[0]).parent,
@@ -183,11 +174,9 @@ rule collect_assemblies:
     input:
         Path(outdir, "02_assemblies", "{sample}", "{sample}__captus-asm"),
     output:
-        temp(
-            directory(
-                Path(run_tmpdir, "03_extract-input", "{sample}__captus-asm")
-            )
-        ),
+        temp(directory(Path("03_extract-input", "{sample}__captus-asm"))),
+    shadow:
+        "minimal"
     shell:
         "ln -s "
         '"$( readlink -f {input} )" '
@@ -196,12 +185,14 @@ rule collect_assemblies:
 
 rule assemble:
     input:
-        r1=Path(run_tmpdir, "reads", "{sample}_R1.fastq.gz"),
-        r2=Path(run_tmpdir, "reads", "{sample}_R2.fastq.gz"),
+        r1=Path("reads", "{sample}_R1.fastq.gz"),
+        r2=Path("reads", "{sample}_R2.fastq.gz"),
     output:
         outdir=directory(
             Path(outdir, "02_assemblies", "{sample}", "{sample}__captus-asm")
         ),
+    shadow:
+        "minimal"
     params:
         outdir=lambda wildcards, output: Path(output.outdir).parent,
     log:
@@ -218,7 +209,7 @@ rule assemble:
         "captus_assembly assemble "
         "--reads {input.r1} {input.r2} "
         "--out {params.outdir} "
-        '--tmp_dir "$( mktemp -d -p ' + run_tmpdir.as_posix() + ' )" '
+        '--tmp_dir "$( mktemp -d )" '
         '--ram "$(( {resources.mem_mb}/1000 ))" '
         "--threads {threads} "
         "&> {log}"
@@ -228,7 +219,7 @@ rule collect_reads:
     input:
         Path(read_directory, "{sample}.r{read}.fastq.gz"),
     output:
-        temp(Path(run_tmpdir, "reads", "{sample}_R{read}.fastq.gz")),
+        temp(Path("reads", "{sample}_R{read}.fastq.gz")),
     shell:
         "ln -s "
         '"$( readlink -f {input} )" '
