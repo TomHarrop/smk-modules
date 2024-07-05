@@ -29,7 +29,7 @@ def get_sample_list(wildcards):
 
 def get_sample_files(wildcards):
     return expand(
-        Path(run_tmpdir, "{sample}"), sample=get_sample_list(wildcards)
+        Path("sample_files", "{sample}"), sample=get_sample_list(wildcards)
     )
 
 
@@ -48,14 +48,6 @@ bbmap = "docker://quay.io/biocontainers/bbmap:39.01--h92535d8_1"
 outdir = Path(config["outdir"] if "outdir" in config else ".")
 logger.debug(f"outdir: {outdir}")
 logdir = Path(outdir, "logs")
-
-# set up a temporary directory for this run
-run_tmpdir = (
-    Path(config["run_tmpdir"])
-    if "run_tmpdir" in config
-    else tempfile.mkdtemp()
-)
-logger.info(f"Setting run_tmpdir to {run_tmpdir}")
 
 # catch samples and
 namelist = config["namelist"]
@@ -78,9 +70,8 @@ logger.debug(f"Caught read_directory: {read_directory}")
 # catch target_file
 target_file = config["target_file"]
 logger.debug(f"Caught target_file: {target_file}")
-tmp_target_file = Path(run_tmpdir, "targetfile.fasta")
 
-
+tmp_target_file = Path(outdir, "targetfile.fasta")
 fixed_tf = Path(outdir, "target_file.fixed.fasta")
 
 
@@ -126,9 +117,11 @@ rule target:
 # tempfile.mkdtemp() is used in the Snakefile.
 rule archive_results:
     input:
-        folder=Path(run_tmpdir, "{result}.{type}"),
+        folder=Path("hybpiper_results", "{result}.{type}"),
     output:
         tarfile=Path(outdir, "{result}.{type}.tar.gz"),
+    shadow:
+        "minimal"
     threads: lambda wildcards, attempt: 4 * attempt
     resources:
         time=lambda wildcards, attempt: 20 * attempt,
@@ -146,9 +139,9 @@ rule retrieve_paralogs:
         namelist=Path(outdir, "namelist.txt"),
         sample_files=get_sample_files,
     output:
-        all_dir=temp(directory(Path(run_tmpdir, "paralogs.all"))),
+        all_dir=temp(directory(Path("hybpiper_results", "paralogs.all"))),
         nochimeras_dir=temp(
-            directory(Path(run_tmpdir, "paralogs.no_chimeras"))
+            directory(Path("hybpiper_results", "paralogs.no_chimeras"))
         ),
         paralog_report=Path(outdir, "paralog_report.tsv"),
         paralogs_above_threshold=Path(outdir, "paralogs_above_threshold.txt"),
@@ -198,7 +191,7 @@ rule retrieve_sequences:
         namelist=Path(outdir, "namelist.txt"),
         sample_files=get_sample_files,
     output:
-        fasta_dir=temp(directory(Path(run_tmpdir, "sequences.{type}"))),
+        fasta_dir=temp(directory(Path("hybpiper_results", "sequences.{type}"))),
     shadow:
         "minimal"
     params:
@@ -259,7 +252,9 @@ rule unarchive_results:
     input:
         tarfile=Path(outdir, "assemble", "{sample}.tar.gz"),
     output:
-        folder=temp(directory(Path(run_tmpdir, "{sample}"))),
+        folder=temp(directory(Path("sample_files", "{sample}"))),
+    shadow:
+        "minimal"
     resources:
         time=lambda wildcards, attempt: 20 * attempt,
     container:
@@ -276,9 +271,11 @@ rule unarchive_results:
 # Run hybpiper and compress the resuilts
 rule pigz:
     input:
-        Path(run_tmpdir, "assemble", "{sample}.tar"),
+        Path("assemble", "{sample}.tar"),
     output:
         Path(outdir, "assemble", "{sample}.tar.gz"),
+    shadow:
+        "minimal"
     resources:
         time=lambda wildcards, attempt: 10 * attempt,
     threads: 4
@@ -300,7 +297,7 @@ rule assemble:
         unpaired=Path(read_directory, "{sample}.unpaired.fastq.gz"),
         target=fixed_tf,
     output:
-        tarfile=temp(Path(run_tmpdir, "assemble", "{sample}.tar")),
+        tarfile=temp(Path("assemble", "{sample}.tar")),
     shadow:
         "minimal"
     log:
@@ -340,7 +337,7 @@ rule assemble:
 rule fix_targetfile:
     input:
         target=tmp_target_file,
-        ctl=Path(run_tmpdir, "check", "fix_targetfile.ctl"),
+        ctl=Path("check", "fix_targetfile.ctl"),
     output:
         target_out=fixed_tf,
         report=Path(logdir, "target_file_report.txt"),
@@ -372,7 +369,7 @@ rule check_targetfile:
     input:
         target=tmp_target_file,
     output:
-        ctl=temp(Path(run_tmpdir, "check", "fix_targetfile.ctl")),
+        ctl=temp(Path("check", "fix_targetfile.ctl")),
     shadow:
         "minimal"
     log:
@@ -390,7 +387,7 @@ rule check_targetfile:
         "--targetfile_dna {input.target} "
         "&> {log} "
         "&& "
-        "cp *.ctl {output.ctl} "
+        "mv *.ctl {output.ctl} "
 
 
 # prepare for hybpiper
