@@ -8,11 +8,12 @@ external_outgroups = Path("test-data", "paragone", "external_outgroups.fasta")
 internal_outgroup = "80974"  # taxon id?
 
 
-paragone_snakefile = github(
-    "tomharrop/smk-modules",
-    path="modules/paragone/Snakefile",
-    tag="0.0.22",
-)
+# paragone_snakefile = github(
+#     "tomharrop/smk-modules",
+#     path="modules/paragone/Snakefile",
+#     tag="0.0.22",
+# )
+paragone_snakefile = "../modules/paragone/Snakefile"
 
 
 rule target:
@@ -32,7 +33,6 @@ module paragone_external:
             "paralog_sequences": paralog_sequences,
             "outdir": Path("test-output", "paragone", "external"),
             "pool": 3,
-            "run_tmpdir": Path("test-output", "paragone", "external_tmp"),
         }
 
 
@@ -48,7 +48,6 @@ module paragone_internal:
             "paralog_sequences": paralog_sequences,
             "outdir": Path("test-output", "paragone", "internal"),
             "pool": 3,
-            "run_tmpdir": Path("test-output", "paragone", "internal_tmp"),
         }
 
 

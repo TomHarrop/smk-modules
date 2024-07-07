@@ -76,17 +76,15 @@ outdir = Path(config["outdir"] if "outdir" in config else ".")
 logger.debug(f"outdir: {outdir}")
 logdir = Path(outdir, "logs")
 
-# set up a temporary directory for this run
-try:
-    run_tmpdir = config["run_tmpdir"]
-    logger.info(f"Caught run_tmpdir {run_tmpdir}")
-except KeyError as e:
-    logger.info(f"{e} not set in config")
-    run_tmpdir = tempfile.mkdtemp()
-    logger.info(f"Setting run_tmpdir to {run_tmpdir}")
-    logger.warning("This probably won't work on a cluster!")
+paragone_directory = Path(outdir, "paragone")
 
-paragone_directory = Path(run_tmpdir, "paragone")
+print(paragone_directory)
+
+alignment_directories = [
+    "26_MO_final_alignments_trimmed",
+    "27_MI_final_alignments_trimmed",
+    "28_RT_final_alignments_trimmed",
+]
 
 #########
 # RULES #
@@ -97,11 +95,7 @@ rule target:
     input:
         expand(
             Path(outdir, "{alignment}"),
-            alignment=[
-                "26_MO_final_alignments_trimmed",
-                "27_MI_final_alignments_trimmed",
-                "28_RT_final_alignments_trimmed",
-            ],
+            alignment=alignment_directories,
         ),
         Path(outdir, "intermediate_files.tar.gz"),
 
@@ -111,12 +105,9 @@ rule collect_paragone_intermediate_files:
         # wait until the move is complete
         expand(
             Path(outdir, "{alignment}"),
-            alignment=[
-                "26_MO_final_alignments_trimmed",
-                "27_MI_final_alignments_trimmed",
-                "28_RT_final_alignments_trimmed",
-            ],
+            alignment=alignment_directories,
         ),
+        paragone_directory,
     output:
         Path(outdir, "intermediate_files.tar.gz"),
     params:
@@ -140,6 +131,8 @@ rule collect_alignments:
         Path(paragone_directory, "{alignment}"),
     output:
         directory(Path(outdir, "{alignment}")),
+    wildcard_constraints:
+        alignment="|".join(alignment_directories),
     container:
         pigz
     resources:
@@ -352,3 +345,10 @@ rule check_and_align:
         "--pool " + str(pool) + " "
         "--threads {params.threads} "
         "&> {log} "
+
+
+# rule mk_outdir:
+#     output:
+#         directory(paragone_directory),
+#     shell:
+#         "mkdir -p {output}"

@@ -56,24 +56,22 @@ statsfiles = [
     "captus-assembly_align.paralogs",
     "captus-assembly_align.samples",
 ]
-alignment_dirs = [
-    f"{x}"
-    for x in expand(
-        Path(
-            outdir,
-            "04_alignments",
-            "03_trimmed",
-            "06_informed",
-            "01_coding_NUC",
-            "{alignment_type}",
-        ),
-        alignment_type=[
-            "01_AA",
-            "02_NT",
-            "03_genes",
-        ],
-    )
-]
+alignment_dirs = expand(
+    Path(
+        outdir,
+        "04_alignments",
+        "03_trimmed",
+        "06_informed",
+        "01_coding_NUC",
+        "{alignment_type}",
+    ),
+    alignment_type=[
+        "01_AA",
+        "02_NT",
+        "03_genes",
+    ],
+)
+
 
 #########
 # RULES #
@@ -175,8 +173,6 @@ rule collect_assemblies:
         Path(outdir, "02_assemblies", "{sample}", "{sample}__captus-asm"),
     output:
         temp(directory(Path("03_extract-input", "{sample}__captus-asm"))),
-    shadow:
-        "minimal"
     shell:
         "ln -s "
         '"$( readlink -f {input} )" '
