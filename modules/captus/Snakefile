@@ -10,10 +10,32 @@ from functools import cache
 #############
 
 
+def get_align_extrs(wildcards):
+    extraction_dir = checkpoints.extract.get(**wildcards).output["outdir"]
+    all_samples = get_sample_list(wildcards)
+    return expand(
+        Path(extraction_dir, "{sample}__captus-ext"),
+        sample=all_samples,
+    )
+
+
+def get_extract_asms(wildcards):
+    all_samples = get_sample_list(wildcards)
+    return expand(
+        Path("05_extract-input", "{sample}__captus-asm"),
+        sample=all_samples,
+    )
+
+
+def get_sample_list(wildcards):
+    namelist_file = checkpoints.collect_namelist.get(**wildcards).output[0]
+    return read_namelist(namelist_file)
+
+
 @cache
-def sample_name_sanitiser(sample_name):
-    if re.compile("[^a-zA-Z0-9_-]").search(sample_name):
-        raise ValueError(f"{sample_name} contains special character(s)")
+def read_namelist(namelist):
+    with open(namelist, "rt") as f:
+        return sorted(set(x.rstrip("\n") for x in f.readlines()))
 
 
 ###########
@@ -28,19 +50,9 @@ outdir = Path(config["outdir"] if "outdir" in config else ".")
 logger.debug(f"outdir: {outdir}")
 logdir = Path(outdir, "logs")
 
-# catch samples
-all_samples = config["sample_list"]
-logger.debug(f"Caught samples: {all_samples}")
-
-# check sample names
-for sample in all_samples:
-    sample_name_sanitiser(sample)
-
-
-wildcard_constraints:
-    sample="[a-zA-Z0-9_-]+",
-    read=[1, 2],
-
+# catch samples and
+namelist = config["namelist"]
+logger.debug(f"Caught namelist: {namelist}")
 
 # catch read directory
 read_directory = Path(config["read_directory"])
@@ -56,27 +68,17 @@ statsfiles = [
     "captus-assembly_align.paralogs",
     "captus-assembly_align.samples",
 ]
-# alignment_dirs = expand(
-#     Path(
-#         outdir,
-#         "04_alignments",
-#         "03_trimmed",
-#         "06_informed",
-#         "{locus_type}",
-#         "{alignment_type}",
-#     ),
-#     alignment_type=[
-#         "01_AA",
-#         "02_NT",
-#         "03_genes",
-#     ],
-#     locus_type=["01_coding_NUC", "03_coding_MIT"],
-# )
 
 
 #########
 # RULES #
 #########
+
+
+wildcard_constraints:
+    sample="[a-zA-Z0-9_-]+",
+    read=[1, 2],
+
 
 # target is defined at the bottom of the workflow
 
@@ -92,13 +94,9 @@ rule align:
             ".report.html",
             ".stats.tsv",
         ),
-        extrs=expand(
-            Path(outdir, "03_extractions", "{sample}__captus-ext"),
-            sample=all_samples,
-        ),
+        extrs=get_align_extrs,
         clustering_data=Path(outdir, "03_extractions", "02_clustering_data"),
     output:
-        # directory(alignment_dirs),
         stats=expand(
             Path(outdir, "04_alignments", "{statsfile}.tsv"),
             statsfile=statsfiles,
@@ -131,12 +129,9 @@ rule align:
         "&> {log}"
 
 
-rule extract:
+checkpoint extract:
     input:
-        asms=expand(
-            Path("05_extract-input", "{sample}__captus-asm"),
-            sample=all_samples,
-        ),
+        asms=get_extract_asms,
         target_file=target_file,
     output:
         multiext(
@@ -148,12 +143,7 @@ rule extract:
             ".report.html",
             ".stats.tsv",
         ),
-        outdir=directory(
-            expand(
-                Path(outdir, "03_extractions", "{sample}__captus-ext"),
-                sample=all_samples,
-            ),
-        ),
+        outdir=expand(Path("05_extract-input")),
         clustering_data=directory(
             Path(outdir, "03_extractions", "02_clustering_data")
         ),
@@ -238,6 +228,16 @@ rule collect_reads:
         "ln -s "
         '"$( readlink -f {input} )" '
         '"$( readlink -f {output} )" '
+
+
+# this is to make sure the namelist ends with a newline
+checkpoint collect_namelist:
+    input:
+        namelist,
+    output:
+        temp(Path(outdir, "namelist.captus.txt")),
+    shell:
+        "(cat {input} && echo) > {output}"
 
 
 rule target:

@@ -420,6 +420,6 @@ checkpoint collect_namelist:
     input:
         namelist,
     output:
-        Path(outdir, "namelist.txt"),
+        Path(outdir, "namelist.captus.txt"),
     shell:
         "(cat {input} && echo) > {output}"

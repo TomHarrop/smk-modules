@@ -37,7 +37,7 @@ module captus:
         captus_snakefile
     config:
         {
-            "sample_list": all_samples,
+            "namelist": Path("namelist.txt"),
             "read_directory": Path("inputs"),
             "target_file": "targetfile.fasta",
         }
@@ -52,6 +52,7 @@ rule set_up_captus_inputs:
     input:
         read_directory=read_directory,
         target_file=target_file,
+        namelist=Path("test-data", "captus", "namelist.txt"),
     output:
         reads=temp(
             expand(
@@ -72,29 +73,41 @@ rule set_up_captus_inputs:
                 "targetfile.fasta",
             )
         ),
+        namelist=temp(Path("test-output", "captus", "namelist.txt")),
     params:
         read_directory=lambda wildcards, output: Path(output.reads[0]).parent,
     shell:
-        "rm -r {params.read_directory} ; "
-        "ln -s "
-        "$(readlink -f {input.read_directory}) "
-        "$(readlink -f {params.read_directory} ) ; "
+        "find {input.read_directory} -maxdepth 1 -mindepth 1 "
+        "-exec ln -s "
+        "$( readlink -f {{}} ) "
+        "$(readlink -f {params.read_directory})/ \; ; "
         "ln -s "
         "$(readlink -f {input.target_file} ) "
         "$(readlink -f {output.target_file} ) ; "
+        "ln -s "
+        "$(readlink -f {input.namelist} ) "
+        "$(readlink -f {output.namelist} ) ; "
 
 
-rule target:
-    input:
-        rules.captus_target.input,
-        # Path(
-        #     "test-output",
-        #     "captus",
-        #     "04_alignments",
-        #     "04_alignments",
-        #     "02_untrimmed",
-        #     "06_informed",
-        #     "03_coding_MIT",
-        #     "02_NT",
-        # ),
-    default_target: True
+rule generate_namelist:
+    output:
+        Path("test-data", "captus", "namelist.txt"),
+    run:
+        with open(output[0], "wt") as f:
+            f.write("\n".join(all_samples))
+
+
+# rule target:
+#     input:
+#         rules.captus_target.input,
+#         # Path(
+#         #     "test-output",
+#         #     "captus",
+#         #     "04_alignments",
+#         #     "04_alignments",
+#         #     "02_untrimmed",
+#         #     "06_informed",
+#         #     "03_coding_MIT",
+#         #     "02_NT",
+#         # ),
+#     default_target: True
