@@ -62,7 +62,7 @@ alignment_dirs = expand(
         "04_alignments",
         "03_trimmed",
         "06_informed",
-        "01_coding_NUC",
+        "{locus_type}",
         "{alignment_type}",
     ),
     alignment_type=[
@@ -70,6 +70,7 @@ alignment_dirs = expand(
         "02_NT",
         "03_genes",
     ],
+    locus_type=["01_coding_NUC", "03_coding_MIT"],
 )
 
 
