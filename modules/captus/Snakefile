@@ -129,7 +129,6 @@ rule align:
         '--ram "$(( {resources.mem_mb}/1000 ))" '
         "--threads {threads} "
         "&> {log}"
-        " ; ls -lh {params.my_outdir}/*"
 
 
 rule extract:
