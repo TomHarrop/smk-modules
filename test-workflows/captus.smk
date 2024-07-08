@@ -50,22 +50,19 @@ use rule * from captus as captus_*
 
 rule set_up_captus_inputs:
     input:
-        read_directory=read_directory,
+        expand(
+            Path(
+                "test-output",
+                "captus",
+                "inputs",
+                "{sample}.r{r}.fastq.gz",
+            ),
+            sample=all_samples,
+            r=["1", "2"],
+        ),
         target_file=target_file,
         namelist=Path("test-data", "captus", "namelist.txt"),
     output:
-        reads=temp(
-            expand(
-                Path(
-                    "test-output",
-                    "captus",
-                    "inputs",
-                    "{sample}.r{r}.fastq.gz",
-                ),
-                sample=all_samples,
-                r=["1", "2"],
-            )
-        ),
         target_file=temp(
             Path(
                 "test-output",
@@ -74,20 +71,22 @@ rule set_up_captus_inputs:
             )
         ),
         namelist=temp(Path("test-output", "captus", "namelist.txt")),
-    params:
-        read_directory=lambda wildcards, output: Path(output.reads[0]).parent,
     shell:
-        "mkdir -p {params.read_directory} ; "
-        "find {input.read_directory} -maxdepth 1 -mindepth 1 "
-        "-exec ln -s "
-        "$( readlink -f {{}} ) "
-        "$(readlink -f {params.read_directory})/ \; ; "
         "ln -s "
         "$(readlink -f {input.target_file} ) "
         "$(readlink -f {output.target_file} ) ; "
         "ln -s "
         "$(readlink -f {input.namelist} ) "
         "$(readlink -f {output.namelist} ) ; "
+
+
+rule set_up_read_files:
+    input:
+        read_directory=Path(read_directory, "{sample}.r{r}.fastq.gz"),
+    output:
+        temp(Path("test-output", "captus", "inputs", "{sample}.r{r}.fastq.gz")),
+    shell:
+        "ln -s $( readlink -f {input} ) $( readlink -f {output} )"
 
 
 rule generate_namelist:
