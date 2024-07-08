@@ -56,22 +56,22 @@ statsfiles = [
     "captus-assembly_align.paralogs",
     "captus-assembly_align.samples",
 ]
-alignment_dirs = expand(
-    Path(
-        outdir,
-        "04_alignments",
-        "03_trimmed",
-        "06_informed",
-        "{locus_type}",
-        "{alignment_type}",
-    ),
-    alignment_type=[
-        "01_AA",
-        "02_NT",
-        "03_genes",
-    ],
-    locus_type=["01_coding_NUC", "03_coding_MIT"],
-)
+# alignment_dirs = expand(
+#     Path(
+#         outdir,
+#         "04_alignments",
+#         "03_trimmed",
+#         "06_informed",
+#         "{locus_type}",
+#         "{alignment_type}",
+#     ),
+#     alignment_type=[
+#         "01_AA",
+#         "02_NT",
+#         "03_genes",
+#     ],
+#     locus_type=["01_coding_NUC", "03_coding_MIT"],
+# )
 
 
 #########

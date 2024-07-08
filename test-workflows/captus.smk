@@ -83,4 +83,14 @@ rule set_up_captus_inputs:
 rule target:
     input:
         rules.captus_target.input,
+        # Path(
+        #     "test-output",
+        #     "captus",
+        #     "04_alignments",
+        #     "04_alignments",
+        #     "02_untrimmed",
+        #     "06_informed",
+        #     "03_coding_MIT",
+        #     "02_NT",
+        # ),
     default_target: True
