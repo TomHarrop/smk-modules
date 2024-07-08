@@ -77,6 +77,7 @@ rule set_up_captus_inputs:
     params:
         read_directory=lambda wildcards, output: Path(output.reads[0]).parent,
     shell:
+        "mkdir -p {params.read_directory} ; "
         "find {input.read_directory} -maxdepth 1 -mindepth 1 "
         "-exec ln -s "
         "$( readlink -f {{}} ) "
