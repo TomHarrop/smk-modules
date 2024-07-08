@@ -83,12 +83,22 @@ alignment_dirs = expand(
 
 rule align:
     input:
+        multiext(
+            Path(
+                outdir, "03_extractions", "captus-assembly_extract"
+            ).as_posix(),
+            ".log",
+            ".refs.json",
+            ".report.html",
+            ".stats.tsv",
+        ),
         extrs=expand(
             Path(outdir, "03_extractions", "{sample}__captus-ext"),
             sample=all_samples,
         ),
+        clustering_data=Path(outdir, "03_extractions", "02_clustering_data"),
     output:
-        directory(alignment_dirs),
+        # directory(alignment_dirs),
         stats=expand(
             Path(outdir, "04_alignments", "{statsfile}.tsv"),
             statsfile=statsfiles,
@@ -96,9 +106,10 @@ rule align:
         report=Path(
             outdir, "04_alignments", "captus-assembly_align.report.html"
         ),
+        my_outdir=directory(Path(outdir, "04_alignments")),
     params:
         extrs=lambda wildcards, input: Path(input.extrs[0]).parent,
-        outdir=lambda wildcards, output: Path(output.report).parent,
+        my_outdir=lambda wildcards, output: Path(output.my_outdir),
     log:
         Path(logdir, "align.log"),
     benchmark:
@@ -107,15 +118,18 @@ rule align:
     resources:
         time=lambda wildcards, attempt: 120 * attempt,
         mem_mb=lambda wildcards, attempt: int(16e3 * attempt),
+    shadow:
+        "minimal"
     container:
         captus
     shell:
         "captus_assembly align "
         "--captus_extractions_dir {params.extrs} "
-        "--out {params.outdir} "
+        "--out {params.my_outdir} "
         '--ram "$(( {resources.mem_mb}/1000 ))" '
         "--threads {threads} "
         "&> {log}"
+        " ; ls -lh {params.my_outdir}/*"
 
 
 rule extract:
@@ -140,6 +154,9 @@ rule extract:
                 Path(outdir, "03_extractions", "{sample}__captus-ext"),
                 sample=all_samples,
             ),
+        ),
+        clustering_data=directory(
+            Path(outdir, "03_extractions", "02_clustering_data")
         ),
     shadow:
         "minimal"
@@ -167,6 +184,7 @@ rule extract:
         '--ram "$(( {resources.mem_mb}/1000 ))" '
         "--threads {threads} "
         "&> {log}"
+        " ; tree"
 
 
 rule collect_assemblies:

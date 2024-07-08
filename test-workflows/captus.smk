@@ -17,6 +17,13 @@ all_samples = sorted(
     set(x.stem.split(".")[0] for x in read_directory.glob("*r1.fastq.gz"))
 )
 
+# these are the stats files we want
+statsfiles = [
+    "captus-assembly_align.alignments",
+    "captus-assembly_align.paralogs",
+    "captus-assembly_align.samples",
+]
+
 captus_snakefile = "../modules/captus/Snakefile"
 # captus_snakefile = github(
 #     "tomharrop/smk-modules",
@@ -39,6 +46,7 @@ module captus:
 
 
 use rule * from captus as captus_*
+
 
 rule set_up_captus_inputs:
     input:
@@ -70,3 +78,9 @@ rule set_up_captus_inputs:
         "ln -s "
         "$(readlink -f {input.target_file} ) "
         "$(readlink -f {output.target_file} ) ; "
+
+
+rule target:
+    input:
+        rules.captus_target.input,
+    default_target: True
