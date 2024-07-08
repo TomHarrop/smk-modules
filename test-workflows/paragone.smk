@@ -16,14 +16,6 @@ internal_outgroup = "80974"  # taxon id?
 paragone_snakefile = "../modules/paragone/Snakefile"
 
 
-rule target:
-    input:
-        expand(
-            "test-output/paragone/{run}/intermediate_files.tar.gz",
-            run=["internal", "external"],
-        ),
-
-
 module paragone_external:
     snakefile:
         paragone_snakefile
@@ -46,11 +38,18 @@ rule set_up_paragone_inputs:
         external_outgroups=external_outgroups,
         paralog_sequences=paralog_sequences,
     output:
-        paralog_sequences=directory(
-            Path("test-output", "paragone", "external", "paralog_input")
+        paralog_sequences=temp(
+            directory(
+                Path("test-output", "paragone", "external", "paralog_input")
+            )
         ),
-        external_outgroups=Path(
-            "test-output", "paragone", "external", "external_outgroups.fasta"
+        external_outgroups=temp(
+            Path(
+                "test-output",
+                "paragone",
+                "external",
+                "external_outgroups.fasta",
+            )
         ),
     shell:
         "ln -s "
@@ -78,3 +77,10 @@ module paragone_internal:
 
 
 use rule * from paragone_internal as pgint_*
+
+
+rule target:
+    input:
+        rules.pgint_target.input,
+        rules.pgext_target.input,
+    default_target: True

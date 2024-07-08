@@ -53,20 +53,24 @@ rule set_up_captus_inputs:
         read_directory=read_directory,
         target_file=target_file,
     output:
-        reads=expand(
+        reads=temp(
+            expand(
+                Path(
+                    "test-output",
+                    "captus",
+                    "inputs",
+                    "{sample}.r{r}.fastq.gz",
+                ),
+                sample=all_samples,
+                r=["1", "2"],
+            )
+        ),
+        target_file=temp(
             Path(
                 "test-output",
                 "captus",
-                "inputs",
-                "{sample}.r{r}.fastq.gz",
-            ),
-            sample=all_samples,
-            r=["1", "2"],
-        ),
-        target_file=Path(
-            "test-output",
-            "captus",
-            "targetfile.fasta",
+                "targetfile.fasta",
+            )
         ),
     params:
         read_directory=lambda wildcards, output: Path(output.reads[0]).parent,
