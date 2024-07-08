@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from pathlib import Path
 from snakemake.logging import logger
 import tempfile
 
@@ -7,6 +8,23 @@ import tempfile
 #############
 # FUNCTIONS #
 #############
+
+
+def get_all_values(d):
+    values = []
+
+    def extract_values(d):
+        if isinstance(d, dict):
+            for value in d.values():
+                extract_values(value)
+        elif isinstance(d, list):
+            for item in d:
+                extract_values(item)
+        else:
+            values.append(d)
+
+    extract_values(d)
+    return values
 
 
 def get_paragone_input(wildcards):
@@ -20,9 +38,9 @@ def get_paragone_input(wildcards):
 
 
 def get_paragone_params(wildcards, input, output):
-    param_dict = {"paralog_sequences": Path(input.paralog_sequences).resolve()}
+    param_dict = {"paralog_sequences": Path(input.paralog_sequences)}
     try:
-        eo_path = Path(input.external_outgroups).resolve()
+        eo_path = Path(input.external_outgroups)
         param_dict[
             "external_outgroups"
         ] = f"--external_outgroups_file {eo_path} "
@@ -78,13 +96,72 @@ logdir = Path(outdir, "logs")
 
 paragone_directory = Path(outdir, "paragone")
 
-print(paragone_directory)
+# This manifest of output directories is used to tell snakemake which files to
+# pick up from the shadow directory. The strategy is to touch a timestamp file
+# (`touch start_time`) before running paragone, then mv everything created
+# after that into the shadow directory.
+paragone_output_directories = {
+    "check_and_align": [
+        Path(paragone_directory, "00_1_logs_and_reports"),
+        Path(
+            paragone_directory,
+            "01_input_paralog_fasta_with_sanitised_filenames",
+        ),
+        Path(paragone_directory, "02_alignments"),
+        Path(paragone_directory, "03_alignments_trimmed"),
+        Path(paragone_directory, "04_alignments_trimmed_hmmcleaned"),
+    ],
+    "alignment_to_tree": [
+        Path(paragone_directory, "00_2_logs_and_reports"),
+        Path(paragone_directory, "05_trees_pre_quality_control"),
+    ],
+    "qc_trees_and_extract_fasta": [
+        Path(paragone_directory, "00_3_logs_and_reports"),
+        Path(paragone_directory, "06_trees_trimmed"),
+        Path(paragone_directory, "07_trees_trimmed_masked"),
+        Path(paragone_directory, "08_trees_trimmed_masked_cut"),
+        Path(paragone_directory, "09_sequences_from_qc_trees"),
+    ],
+    "align_selected_and_tree": [
+        Path(paragone_directory, "00_4_logs_and_reports"),
+        Path(paragone_directory, "10_sequences_from_qc_outgroups_added"),
+        Path(paragone_directory, "11_pre_paralog_resolution_alignments"),
+        Path(paragone_directory, "13_pre_paralog_resolution_trees"),
+        Path(
+            paragone_directory,
+            "12_pre_paralog_resolution_alignments_trimmed",
+        ),
+    ],
+    "prune_paralogs": [
+        Path(paragone_directory, "00_5_logs_and_reports"),
+        Path(paragone_directory, "14_pruned_MO"),
+        Path(paragone_directory, "15_pruned_MI"),
+        Path(paragone_directory, "16_pruned_RT"),
+    ],
+    "final_alignments": [
+        Path(paragone_directory, "00_6_logs_and_reports"),
+        Path(paragone_directory, "17_selected_sequences_MO"),
+        Path(paragone_directory, "18_selected_sequences_MI"),
+        Path(paragone_directory, "19_selected_sequences_RT"),
+        Path(paragone_directory, "20_MO_stripped_names"),
+        Path(paragone_directory, "21_MI_stripped_names"),
+        Path(paragone_directory, "22_RT_stripped_names"),
+        Path(paragone_directory, "23_MO_final_alignments"),
+        Path(paragone_directory, "24_MI_final_alignments"),
+        Path(paragone_directory, "25_RT_final_alignments"),
+        Path(paragone_directory, "26_MO_final_alignments_trimmed"),
+        Path(paragone_directory, "27_MI_final_alignments_trimmed"),
+        Path(paragone_directory, "28_RT_final_alignments_trimmed"),
+    ],
+}
+
 
 alignment_directories = [
     "26_MO_final_alignments_trimmed",
     "27_MI_final_alignments_trimmed",
     "28_RT_final_alignments_trimmed",
 ]
+
 
 #########
 # RULES #
@@ -93,33 +170,27 @@ alignment_directories = [
 
 rule target:
     input:
-        expand(
-            Path(outdir, "{alignment}"),
-            alignment=alignment_directories,
-        ),
         Path(outdir, "intermediate_files.tar.gz"),
+        [Path(outdir, x) for x in alignment_directories],
 
 
 rule collect_paragone_intermediate_files:
     input:
-        # wait until the move is complete
-        expand(
-            Path(outdir, "{alignment}"),
-            alignment=alignment_directories,
-        ),
-        paragone_directory,
+        get_all_values(paragone_output_directories),
     output:
         Path(outdir, "intermediate_files.tar.gz"),
     params:
-        wd=Path(paragone_directory).resolve(),
+        wd=lambda wildcards, input: Path(input[0]).parent.parent,
     log:
         Path(logdir, "collect_paragone_intermediate_files.log"),
-    container:
-        pigz
     threads: workflow.cores
     resources:
         mem_mb=lambda wildcards, attempt: 8e3 * attempt,
         time=lambda wildcards, attempt: 10 * attempt,
+    shadow:
+        "minimal"
+    container:
+        pigz
     shell:
         "tar --directory {params.wd} -cv . "
         "2> {log} "
@@ -133,13 +204,13 @@ rule collect_alignments:
         directory(Path(outdir, "{alignment}")),
     wildcard_constraints:
         alignment="|".join(alignment_directories),
-    container:
-        pigz
     resources:
         mem_mb=lambda wildcards, attempt: 8e3 * attempt,
         time=lambda wildcards, attempt: 10 * attempt,
+    container:
+        pigz
     shell:
-        "mv {input} {output}"
+        "cp -r {input} {output}"
 
 
 rule final_alignments:
@@ -151,34 +222,38 @@ rule final_alignments:
             paragone_directory, "11_pre_paralog_resolution_alignments"
         ),
     output:
-        mo=directory(
-            Path(paragone_directory, "26_MO_final_alignments_trimmed")
-        ),
-        mi=directory(
-            Path(paragone_directory, "27_MI_final_alignments_trimmed")
-        ),
-        rt=directory(
-            Path(paragone_directory, "28_RT_final_alignments_trimmed")
-        ),
+        [
+            temp(directory(x))
+            for x in paragone_output_directories["final_alignments"]
+        ],
     params:
-        wd=Path(paragone_directory).resolve(),
+        outdir=lambda wildcards, output: Path(output[0]).parent,
         threads=lambda wildcards, threads: threads // pool,
     log:
-        Path(logdir, "final_alignments.log").resolve(),
+        Path(logdir, "final_alignments.log"),
     threads: workflow.cores
     resources:
         mem_mb=lambda wildcards, attempt: 8e3 * attempt,
         time=lambda wildcards, attempt: 30 * attempt,
+    shadow:
+        "minimal"
     container:
         paragone
     shell:
-        "cd {params.wd} || exit 1 ; "
+        "ln -s $(readlink -f {input.mo} ) ./ ; "
+        "ln -s $(readlink -f {input.mi} ) ./ ; "
+        "ln -s $(readlink -f {input.rt} ) ./ ; "
+        "ln -s $(readlink -f {input.alignments} ) ./ ; "
+        "touch start_time ; "
         "paragone final_alignments "
         "--mo --rt --mi "
         "--pool " + str(pool) + " "
         "--threads {params.threads} "
         "--keep_intermediate_files "
-        "&> {log} "
+        "&> {log} ; "
+        "mv 00_logs_and_reports {params.outdir}/00_6_logs_and_reports ; "
+        "find . -maxdepth 1 -mindepth 1 -newer start_time "
+        "-exec mv {{}} {params.outdir} \; "
 
 
 rule prune_paralogs:
@@ -186,30 +261,37 @@ rule prune_paralogs:
         trees=Path(paragone_directory, "13_pre_paralog_resolution_trees"),
         groups_list=Path(
             paragone_directory,
-            "00_logs_and_reports",
-            "reports",
             "in_and_outgroups_list.tsv",
         ),
     output:
-        mo=directory(Path(paragone_directory, "14_pruned_MO")),
-        mi=directory(Path(paragone_directory, "15_pruned_MI")),
-        rt=directory(Path(paragone_directory, "16_pruned_RT")),
+        [
+            temp(directory(x))
+            for x in paragone_output_directories["prune_paralogs"]
+        ],
     params:
-        wd=Path(paragone_directory).resolve(),
+        outdir=lambda wildcards, output: Path(output[0]).parent,
     log:
-        Path(logdir, "prune_paralogs.log").resolve(),
+        Path(logdir, "prune_paralogs.log"),
     threads: 1
     resources:
         mem_mb=lambda wildcards, attempt: 8e3 * attempt,
         time=lambda wildcards, attempt: 30 * attempt,
+    shadow:
+        "minimal"
     container:
         paragone
     shell:
-        "cd {params.wd} || exit 1 ; "
+        "ln -s $(readlink -f {input.trees} ) ./ ; "
+        "mkdir -p ./00_logs_and_reports/reports/ ; "
+        "ln -s $(readlink -f {input.groups_list} ) ./00_logs_and_reports/reports/ ; "
+        "touch start_time ; "
         "paragone "
         "prune_paralogs "
         "--mo --rt --mi "
-        "&> {log} "
+        "&> {log} ; "
+        "mv 00_logs_and_reports {params.outdir}/00_5_logs_and_reports ; "
+        "find . -maxdepth 1 -mindepth 1 -newer start_time "
+        "-exec mv {{}} {params.outdir} \; "
 
 
 rule align_selected_and_tree:
@@ -218,42 +300,50 @@ rule align_selected_and_tree:
         alignments=Path(paragone_directory, "04_alignments_trimmed_hmmcleaned"),
         taxon_list=Path(
             paragone_directory,
-            "00_logs_and_reports",
-            "reports",
             "outgroup_taxon_list.tsv",
         ),
     output:
-        trees=directory(
-            Path(paragone_directory, "13_pre_paralog_resolution_trees")
-        ),
-        alignments=directory(
-            Path(paragone_directory, "11_pre_paralog_resolution_alignments")
-        ),
-        groups_list=Path(
-            paragone_directory,
-            "00_logs_and_reports",
-            "reports",
-            "in_and_outgroups_list.tsv",
+        [
+            temp(directory(x))
+            for x in paragone_output_directories["align_selected_and_tree"]
+        ],
+        groups_list=temp(
+            Path(
+                paragone_directory,
+                "in_and_outgroups_list.tsv",
+            )
         ),
     params:
-        wd=Path(paragone_directory).resolve(),
+        input_logdir=lambda wildcards, input: Path(
+            input.taxon_list
+        ).parent.parent,
+        outdir=lambda wildcards, output: Path(output[0]).parent,
         threads=lambda wildcards, threads: threads // pool,
     log:
-        Path(logdir, "align_selected_and_tree.log").resolve(),
+        Path(logdir, "align_selected_and_tree.log"),
     threads: workflow.cores
     resources:
         mem_mb=lambda wildcards, attempt: 8e3 * attempt,
         time=lambda wildcards, attempt: 30 * attempt,
+    shadow:
+        "minimal"
     container:
         paragone
     shell:
-        "cd {params.wd} || exit 1 ; "
+        "ln -s $(readlink -f {input.sequences} ) ./ ; "
+        "mkdir -p ./00_logs_and_reports/reports/ ; "
+        "ln -s $(readlink -f {input.taxon_list} ) ./00_logs_and_reports/reports/ ; "
+        "touch start_time ; "
         "paragone "
-        "align_selected_and_tree 04_alignments_trimmed_hmmcleaned "
+        "align_selected_and_tree {input.alignments} "
         "--use_fasttree "
         "--pool " + str(pool) + " "
         "--threads {params.threads} "
-        "&> {log} "
+        "&> {log} ; "
+        "cp 00_logs_and_reports/reports/in_and_outgroups_list.tsv {output.groups_list} ; "
+        "mv 00_logs_and_reports {params.outdir}/00_4_logs_and_reports ; "
+        "find . -maxdepth 1 -mindepth 1 -newer start_time "
+        "-exec mv {{}} {params.outdir} \; "
 
 
 rule qc_trees_and_extract_fasta:
@@ -261,94 +351,106 @@ rule qc_trees_and_extract_fasta:
         alignments=Path(paragone_directory, "04_alignments_trimmed_hmmcleaned"),
         trees=Path(paragone_directory, "05_trees_pre_quality_control"),
     output:
-        sequences=directory(
-            Path(paragone_directory, "09_sequences_from_qc_trees")
-        ),
+        [
+            temp(directory(x))
+            for x in paragone_output_directories["qc_trees_and_extract_fasta"]
+        ],
     params:
-        wd=Path(paragone_directory).resolve(),
+        outdir=lambda wildcards, output: Path(output[0]).parent,
     log:
-        Path(logdir, "qc_trees_and_extract_fasta.log").resolve(),
+        Path(logdir, "qc_trees_and_extract_fasta.log"),
     threads: 1
     resources:
         mem_mb=lambda wildcards, attempt: 8e3 * attempt,
         time=lambda wildcards, attempt: 30 * attempt,
+    shadow:
+        "minimal"
     container:
         paragone
     shell:
-        "cd {params.wd} || exit 1 ; "
+        "ln -s $(readlink -f {input.trees} ) ./ ; "
+        "touch start_time ; "
         "paragone "
-        "qc_trees_and_extract_fasta 04_alignments_trimmed_hmmcleaned "
+        "qc_trees_and_extract_fasta "
         "--treeshrink_q_value 0.20 "
         "--cut_deep_paralogs_internal_branch_length_cutoff 0.04 "
-        "&> {log} "
+        "{input.alignments} "
+        "&> {log} ; "
+        "mv 00_logs_and_reports {params.outdir}/00_3_logs_and_reports ; "
+        "find . -maxdepth 1 -mindepth 1 -newer start_time "
+        "-exec mv {{}} {params.outdir} \; "
 
 
 rule alignment_to_tree:
     input:
         alignments=Path(paragone_directory, "04_alignments_trimmed_hmmcleaned"),
     output:
-        trees=directory(
-            Path(paragone_directory, "05_trees_pre_quality_control")
-        ),
+        [
+            temp(directory(x))
+            for x in paragone_output_directories["alignment_to_tree"]
+        ],
     params:
-        wd=Path(paragone_directory).resolve(),
+        outdir=lambda wildcards, output: Path(output[0]).parent,
         threads=lambda wildcards, threads: threads // pool,
     log:
-        Path(logdir, "alignment_to_tree.log").resolve(),
+        Path(logdir, "alignment_to_tree.log"),
     threads: workflow.cores
     resources:
         mem_mb=lambda wildcards, attempt: 8e3 * attempt,
         time=lambda wildcards, attempt: 30 * attempt,
+    shadow:
+        "minimal"
     container:
         paragone
     shell:
-        "cd {params.wd} || exit 1 ; "
         "paragone "
-        "alignment_to_tree 04_alignments_trimmed_hmmcleaned "
+        "alignment_to_tree {input.alignments} "
         "--use_fasttree "
         "--pool " + str(pool) + " "
         "--threads {params.threads} "
-        "&> {log} "
+        "&> {log} ; "
+        "mv 00_logs_and_reports {params.outdir}/00_2_logs_and_reports ; "
+        "mv 05_trees_pre_quality_control {params.outdir}"
 
 
 rule check_and_align:
     input:
         unpack(get_paragone_input),
     output:
-        alignments=directory(
-            Path(paragone_directory, "04_alignments_trimmed_hmmcleaned")
-        ),
-        taxon_list=Path(
-            paragone_directory,
-            "00_logs_and_reports",
-            "reports",
-            "outgroup_taxon_list.tsv",
+        [
+            temp(directory(x))
+            for x in paragone_output_directories["check_and_align"]
+        ],
+        outgroup_taxon_list=temp(
+            Path(
+                paragone_directory,
+                "outgroup_taxon_list.tsv",
+            )
         ),
     params:
         get_paragone_params,
-        wd=Path(paragone_directory).resolve(),
+        outdir=lambda wildcards, output: Path(output[0]).parent,
         threads=lambda wildcards, threads: threads // pool,
     log:
-        Path(logdir, "check_and_align.log").resolve(),
+        Path(logdir, "check_and_align.log"),
     threads: workflow.cores
     resources:
         mem_mb=lambda wildcards, attempt: 8e3 * attempt,
         time=lambda wildcards, attempt: 30 * attempt,
+    shadow:
+        "minimal"
     container:
         paragone
     shell:
-        "cd {params.wd} || exit 1 ; "
+        "touch start_time ; "
         "paragone "
         "check_and_align {params[0][paralog_sequences]} "
         "{params[0][external_outgroups]} "
         "{params[0][internal_outgroup]} "
         "--pool " + str(pool) + " "
         "--threads {params.threads} "
-        "&> {log} "
-
-
-# rule mk_outdir:
-#     output:
-#         directory(paragone_directory),
-#     shell:
-#         "mkdir -p {output}"
+        "&> {log} ; "
+        "cp 00_logs_and_reports/reports/outgroup_taxon_list.tsv {output.outgroup_taxon_list} ; "
+        "mv 00_logs_and_reports {params.outdir}/00_1_logs_and_reports ; "
+        "find . -maxdepth 1 -mindepth 1 -newer start_time "
+        "-exec mv {{}} {params.outdir} \;"

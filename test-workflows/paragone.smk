@@ -29,14 +29,36 @@ module paragone_external:
         paragone_snakefile
     config:
         {
-            "external_outgroups": external_outgroups,
-            "paralog_sequences": paralog_sequences,
-            "outdir": Path("test-output", "paragone", "external"),
+            "external_outgroups": "external_outgroups.fasta",
+            "paralog_sequences": "paralog_input",
+            # "outdir": Path("test-output", "paragone", "external"),
             "pool": 3,
         }
+    prefix:
+        Path("test-output", "paragone", "external")
 
 
 use rule * from paragone_external as pgext_*
+
+
+rule set_up_paragone_inputs:
+    input:
+        external_outgroups=external_outgroups,
+        paralog_sequences=paralog_sequences,
+    output:
+        paralog_sequences=directory(
+            Path("test-output", "paragone", "external", "paralog_input")
+        ),
+        external_outgroups=Path(
+            "test-output", "paragone", "external", "external_outgroups.fasta"
+        ),
+    shell:
+        "ln -s "
+        "$(readlink -f {input.paralog_sequences}) "
+        "$(readlink -f {output.paralog_sequences} ) ; "
+        "ln -s "
+        "$(readlink -f {input.external_outgroups} ) "
+        "$(readlink -f {output.external_outgroups} ) ; "
 
 
 module paragone_internal:
@@ -49,6 +71,10 @@ module paragone_internal:
             "outdir": Path("test-output", "paragone", "internal"),
             "pool": 3,
         }
+
+
+# prefix:
+#     Path("test-output", "paragone", "internal")
 
 
 use rule * from paragone_internal as pgint_*
