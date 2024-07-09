@@ -1,0 +1,229 @@
+import re
+import tempfile
+from snakemake.logging import logger
+from functools import cache
+
+#############
+# FUNCTIONS #
+#############
+
+
+def get_align_output_files(wildcards):
+    align_outdir = checkpoints.align.get(**wildcards).output["outdir"]
+    return [x for x in Path(align_outdir).glob("**")]
+
+
+def get_extraction_outdir(wildcards):
+    return checkpoints.extract.get(**wildcards).output["outdir"]
+
+
+def get_align_extrs(wildcards):
+    extraction_dir = checkpoints.extract.get(**wildcards).output["outdir"]
+    all_samples = get_sample_list(wildcards)
+    return expand(
+        Path(extraction_dir, "{sample}__captus-ext"),
+        sample=all_samples,
+    )
+
+
+def get_align_stats(wildcards):
+    extraction_dir = checkpoints.extract.get(**wildcards).output["outdir"]
+    return multiext(
+        Path(extraction_dir, "captus-assembly_extract").as_posix(),
+        ".log",
+        ".refs.json",
+        ".report.html",
+        ".stats.tsv",
+    )
+
+
+def get_align_clustering_data(wildcards):
+    extraction_dir = checkpoints.extract.get(**wildcards).output["outdir"]
+    return Path(extraction_dir, "02_clustering_data")
+
+
+def get_extract_asms(wildcards):
+    all_samples = get_sample_list(wildcards)
+    return expand(
+        Path(outdir, "05_extract-input", "{sample}__captus-asm"),
+        sample=all_samples,
+    )
+
+
+def get_sample_list(wildcards):
+    namelist_file = checkpoints.collect_namelist.get(**wildcards).output[0]
+    return read_namelist(namelist_file)
+
+
+@cache
+def read_namelist(namelist):
+    with open(namelist, "rt") as f:
+        return sorted(set(x.rstrip("\n") for x in f.readlines()))
+
+
+###########
+# GLOBALS #
+###########
+
+# containers
+captus = "docker://quay.io/biocontainers/captus:1.0.1--pyhdfd78af_2"
+
+# set up directories
+outdir = Path(config["outdir"] if "outdir" in config else ".")
+logger.debug(f"outdir: {outdir}")
+logdir = Path(outdir, "logs")
+
+# catch samples and
+namelist = config["namelist"]
+logger.debug(f"Caught namelist: {namelist}")
+
+# catch read directory
+read_directory = Path(config["read_directory"])
+logger.debug(f"Caught read_directory: {read_directory}")
+
+# catch target_file
+target_file = Path(config["target_file"])
+logger.debug(f"Caught target_file: {target_file}")
+
+
+#########
+# RULES #
+#########
+
+
+rule target:
+    input:
+        get_align_output_files,
+        get_align_stats,
+
+
+checkpoint align:
+    input:
+        extrs=get_align_extrs,
+        stats=get_align_stats,
+        clustering_data=get_align_clustering_data,
+    output:
+        outdir=directory(Path(outdir, "04_alignments")),
+    params:
+        extr_dir=lambda wildcards: get_extraction_outdir(wildcards),
+    log:
+        Path(logdir, "align.log"),
+    benchmark:
+        Path(logdir, "benchmark.align.log")
+    threads: lambda wildcards, attempt: 16 * attempt
+    resources:
+        time=lambda wildcards, attempt: 120 * attempt,
+        mem_mb=lambda wildcards, attempt: int(16e3 * attempt),
+    shadow:
+        "minimal"
+    container:
+        captus
+    shell:
+        "captus_assembly align "
+        "--captus_extractions_dir {params.extr_dir} "
+        "--out {output.outdir} "
+        '--ram "$(( {resources.mem_mb}/1000 ))" '
+        "--threads {threads} "
+        "&> {log}"
+
+
+checkpoint extract:
+    input:
+        asms=get_extract_asms,
+        target_file=target_file,
+    output:
+        outdir=directory(Path(outdir, "03_extractions")),
+    shadow:
+        "minimal"
+    params:
+        asms=lambda wildcards, input: Path(input.asms[0]).parent,
+    log:
+        Path(logdir, "extract.log"),
+    benchmark:
+        Path(logdir, "benchmark.extract.log")
+    threads: lambda wildcards, attempt: 16 * attempt
+    resources:
+        time=lambda wildcards, attempt: 120 * attempt,
+        mem_mb=lambda wildcards, attempt: int(16e3 * attempt),
+    container:
+        captus
+    shell:
+        "captus_assembly extract "
+        "--captus_assemblies_dir {params.asms} "
+        "--out {output.outdir} "
+        "--nuc_refs {input.target_file} "
+        "--mit_refs SeedPlantsMIT "
+        "--cluster_leftovers "
+        "--mmseqs_method easy-cluster "
+        '--ram "$(( {resources.mem_mb}/1000 ))" '
+        "--threads {threads} "
+        "&> {log}"
+        " ; ls -lh {output.outdir}/*"
+
+
+rule collect_assemblies:
+    input:
+        Path(outdir, "02_assemblies", "{sample}", "{sample}__captus-asm"),
+    output:
+        temp(
+            directory(
+                Path(outdir, "05_extract-input", "{sample}__captus-asm")
+            )
+        ),
+    shell:
+        "ln -s "
+        '"$( readlink -f {input} )" '
+        '"$( readlink -f {output} )" '
+
+
+rule assemble:
+    input:
+        r1=Path(outdir, "reads", "{sample}_R1.fastq.gz"),
+        r2=Path(outdir, "reads", "{sample}_R2.fastq.gz"),
+    output:
+        outdir=directory(
+            Path(outdir, "02_assemblies", "{sample}", "{sample}__captus-asm")
+        ),
+    shadow:
+        "minimal"
+    params:
+        outdir=lambda wildcards, output: Path(output.outdir).parent,
+    log:
+        Path(logdir, "assemble", "{sample}.log"),
+    benchmark:
+        Path(logdir, "assemble", "benchmark.{sample}.log")
+    threads: lambda wildcards, attempt: 16 * attempt
+    resources:
+        time=lambda wildcards, attempt: 120 * attempt,
+        mem_mb=lambda wildcards, attempt: int(16e3 * attempt),
+    container:
+        captus
+    shell:
+        "captus_assembly assemble "
+        "--reads {input.r1} {input.r2} "
+        "--out {params.outdir} "
+        '--tmp_dir "$( mktemp -d )" '
+        '--ram "$(( {resources.mem_mb}/1000 ))" '
+        "--threads {threads} "
+        "&> {log}"
+
+
+rule collect_reads:
+    input:
+        Path(read_directory, "{sample}.r{read}.fastq.gz"),
+    output:
+        temp(Path(outdir, "reads", "{sample}_R{read}.fastq.gz")),
+    shell:
+        "ln -s "
+        '"$( readlink -f {input} )" '
+        '"$( readlink -f {output} )" '
+
+
+# this is to make sure the namelist ends with a newline
+checkpoint collect_namelist:
+    input:
+        namelist,
+    output:
+        temp(Path(outdir, "namelist.captus.txt")),
+    shell:
+        "(cat {input} && echo) > {output}"
