@@ -11,16 +11,9 @@ internal_outgroup = "80974"  # taxon id?
 paragone_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/paragone/Snakefile",
-    tag="0.0.22",
+    tag="0.2.00",
 )
-
-
-rule target:
-    input:
-        expand(
-            "test-output/paragone/{run}/intermediate_files.tar.gz",
-            run=["internal", "external"],
-        ),
+# paragone_snakefile = "../modules/paragone/Snakefile"
 
 
 module paragone_external:
@@ -28,15 +21,43 @@ module paragone_external:
         paragone_snakefile
     config:
         {
-            "external_outgroups": external_outgroups,
-            "paralog_sequences": paralog_sequences,
-            "outdir": Path("test-output", "paragone", "external"),
+            "external_outgroups": "external_outgroups.fasta",
+            "paralog_sequences": "paralog_input",
+            # "outdir": Path("test-output", "paragone", "external"),
             "pool": 3,
-            "run_tmpdir": Path("test-output", "paragone", "external_tmp"),
         }
+    prefix:
+        Path("test-output", "paragone", "external")
 
 
 use rule * from paragone_external as pgext_*
+
+
+rule set_up_paragone_inputs:
+    input:
+        external_outgroups=external_outgroups,
+        paralog_sequences=paralog_sequences,
+    output:
+        paralog_sequences=temp(
+            directory(
+                Path("test-output", "paragone", "external", "paralog_input")
+            )
+        ),
+        external_outgroups=temp(
+            Path(
+                "test-output",
+                "paragone",
+                "external",
+                "external_outgroups.fasta",
+            )
+        ),
+    shell:
+        "ln -s "
+        "$(readlink -f {input.paralog_sequences}) "
+        "$(readlink -f {output.paralog_sequences} ) ; "
+        "ln -s "
+        "$(readlink -f {input.external_outgroups} ) "
+        "$(readlink -f {output.external_outgroups} ) ; "
 
 
 module paragone_internal:
@@ -48,8 +69,18 @@ module paragone_internal:
             "paralog_sequences": paralog_sequences,
             "outdir": Path("test-output", "paragone", "internal"),
             "pool": 3,
-            "run_tmpdir": Path("test-output", "paragone", "internal_tmp"),
         }
 
 
+# prefix:
+#     Path("test-output", "paragone", "internal")
+
+
 use rule * from paragone_internal as pgint_*
+
+
+rule target:
+    input:
+        rules.pgint_target.input,
+        rules.pgext_target.input,
+    default_target: True

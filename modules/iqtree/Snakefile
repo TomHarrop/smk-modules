@@ -51,16 +51,6 @@ outdir = Path(config["outdir"] if "outdir" in config else ".")
 logger.debug(f"outdir: {outdir}")
 logdir = Path(outdir, "logs")
 
-# set up a temporary directory for this run
-try:
-    run_tmpdir = config["run_tmpdir"]
-    logger.info(f"Caught run_tmpdir {run_tmpdir}")
-except KeyError as e:
-    logger.info(f"{e} not set in config")
-    run_tmpdir = tempfile.mkdtemp()
-    logger.info(f"Setting run_tmpdir to {run_tmpdir}")
-    logger.warning("This probably won't work on a cluster!")
-
 
 # catch alignmnt directory
 alignment_directory = f"{config['alignment_directory']}"

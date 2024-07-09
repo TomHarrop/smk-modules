@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import re
 import tempfile
 from snakemake.logging import logger
@@ -10,10 +8,59 @@ from functools import cache
 #############
 
 
+def get_align_output_files(wildcards):
+    align_outdir = checkpoints.align.get(**wildcards).output["outdir"]
+    return [x for x in Path(align_outdir).glob("**")]
+
+
+def get_extraction_outdir(wildcards):
+    return checkpoints.extract.get(**wildcards).output["outdir"]
+
+
+def get_align_extrs(wildcards):
+    extraction_dir = get_extraction_outdir(wildcards)
+    all_samples = get_sample_list(wildcards)
+    sample_files = expand(
+        Path("{sample}__captus-ext"),
+        sample=all_samples,
+    )
+    return [Path(extraction_dir, x) for x in sample_files]
+
+
+def get_align_stats(wildcards):
+    extraction_dir = get_extraction_outdir(wildcards)
+    return multiext(
+        Path(extraction_dir, "captus-assembly_extract").as_posix(),
+        ".log",
+        ".refs.json",
+        ".report.html",
+        ".stats.tsv",
+    )
+
+
+def get_align_clustering_data(wildcards):
+    extraction_dir = get_extraction_outdir(wildcards)
+    return Path(extraction_dir, "02_clustering_data")
+
+
+def get_extract_asms(wildcards):
+    all_samples = get_sample_list(wildcards)
+    sample_files = expand(
+        Path("05_extract-input", "{sample}__captus-asm"),
+        sample=all_samples,
+    )
+    return [Path(outdir, x) for x in sample_files]
+
+
+def get_sample_list(wildcards):
+    namelist_file = checkpoints.collect_namelist.get(**wildcards).output[0]
+    return read_namelist(namelist_file)
+
+
 @cache
-def sample_name_sanitiser(sample_name):
-    if re.compile("[^a-zA-Z0-9_-]").search(sample_name):
-        raise ValueError(f"{sample_name} contains special character(s)")
+def read_namelist(namelist):
+    with open(namelist, "rt") as f:
+        return sorted(set(x.rstrip("\n") for x in f.readlines()))
 
 
 ###########
@@ -28,90 +75,39 @@ outdir = Path(config["outdir"] if "outdir" in config else ".")
 logger.debug(f"outdir: {outdir}")
 logdir = Path(outdir, "logs")
 
-
-# set up a temporary directory for this run
-try:
-    run_tmpdir = config["run_tmpdir"]
-    logger.info(f"Caught run_tmpdir {run_tmpdir}")
-except KeyError as e:
-    logger.info(f"{e} not set in config")
-    run_tmpdir = tempfile.mkdtemp()
-    logger.info(f"Setting run_tmpdir to {run_tmpdir}")
-    logger.warning("This probably won't work on a cluster!")
-
-
-# catch samples
-all_samples = config["sample_list"]
-logger.debug(f"Caught samples: {all_samples}")
-
-
-# check sample names
-for sample in all_samples:
-    sample_name_sanitiser(sample)
-
-
-wildcard_constraints:
-    sample="[a-zA-Z0-9_-]+",
-    read=[1, 2],
-
+# catch samples and
+namelist = config["namelist"]
+logger.debug(f"Caught namelist: {namelist}")
 
 # catch read directory
-read_directory = config["read_directory"]
+read_directory = Path(config["read_directory"])
 logger.debug(f"Caught read_directory: {read_directory}")
 
 # catch target_file
-target_file = config["target_file"]
+target_file = Path(config["target_file"])
 logger.debug(f"Caught target_file: {target_file}")
 
-# captus outputs
-statsfiles = [
-    "captus-assembly_align.alignments",
-    "captus-assembly_align.paralogs",
-    "captus-assembly_align.samples",
-]
-alignment_dirs = (
-    expand(
-        Path(
-            outdir,
-            "04_alignments",
-            "03_trimmed",
-            "06_informed",
-            "01_coding_NUC",
-            "{alignment_type}",
-        ),
-        alignment_type=[
-            "01_AA",
-            "02_NT",
-            "03_genes",
-        ],
-    ),
-)
 
 #########
 # RULES #
 #########
 
-# target is defined at the bottom of the workflow
 
-
-rule align:
+rule target:
     input:
-        extrs=expand(
-            Path(outdir, "03_extractions", "{sample}__captus-ext"),
-            sample=all_samples,
-        ),
+        get_align_output_files,
+        get_align_stats,
+
+
+checkpoint align:
+    input:
+        extrs=get_align_extrs,
+        stats=get_align_stats,
+        clustering_data=get_align_clustering_data,
     output:
-        directory(alignment_dirs),
-        stats=expand(
-            Path(outdir, "04_alignments", "{statsfile}.tsv"),
-            statsfile=statsfiles,
-        ),
-        report=Path(
-            outdir, "04_alignments", "captus-assembly_align.report.html"
-        ),
+        outdir=directory(Path(outdir, "04_alignments")),
     params:
-        extrs=lambda wildcards, input: Path(input.extrs[0]).parent,
-        outdir=lambda wildcards, output: Path(output.report).parent,
+        extr_dir=lambda wildcards: get_extraction_outdir(wildcards),
     log:
         Path(logdir, "align.log"),
     benchmark:
@@ -120,43 +116,29 @@ rule align:
     resources:
         time=lambda wildcards, attempt: 120 * attempt,
         mem_mb=lambda wildcards, attempt: int(16e3 * attempt),
+    shadow:
+        "minimal"
     container:
         captus
     shell:
         "captus_assembly align "
-        "--captus_extractions_dir {params.extrs} "
-        "--out {params.outdir} "
+        "--captus_extractions_dir {params.extr_dir} "
+        "--out {output.outdir} "
         '--ram "$(( {resources.mem_mb}/1000 ))" '
         "--threads {threads} "
         "&> {log}"
 
 
-rule extract:
+checkpoint extract:
     input:
-        asms=expand(
-            Path(run_tmpdir, "03_extract-input", "{sample}__captus-asm"),
-            sample=all_samples,
-        ),
+        asms=get_extract_asms,
         target_file=target_file,
     output:
-        multiext(
-            Path(
-                outdir, "03_extractions", "captus-assembly_extract"
-            ).as_posix(),
-            ".log",
-            ".refs.json",
-            ".report.html",
-            ".stats.tsv",
-        ),
-        outdir=directory(
-            expand(
-                Path(outdir, "03_extractions", "{sample}__captus-ext"),
-                sample=all_samples,
-            ),
-        ),
+        outdir=directory(Path(outdir, "03_extractions")),
+    shadow:
+        "minimal"
     params:
         asms=lambda wildcards, input: Path(input.asms[0]).parent,
-        outdir=lambda wildcards, output: Path(output.outdir[0]).parent,
     log:
         Path(logdir, "extract.log"),
     benchmark:
@@ -170,7 +152,7 @@ rule extract:
     shell:
         "captus_assembly extract "
         "--captus_assemblies_dir {params.asms} "
-        "--out {params.outdir} "
+        "--out {output.outdir} "
         "--nuc_refs {input.target_file} "
         "--mit_refs SeedPlantsMIT "
         "--cluster_leftovers "
@@ -178,6 +160,7 @@ rule extract:
         '--ram "$(( {resources.mem_mb}/1000 ))" '
         "--threads {threads} "
         "&> {log}"
+        " ; ls -lh {output.outdir}/*"
 
 
 rule collect_assemblies:
@@ -186,7 +169,7 @@ rule collect_assemblies:
     output:
         temp(
             directory(
-                Path(run_tmpdir, "03_extract-input", "{sample}__captus-asm")
+                Path(outdir, "05_extract-input", "{sample}__captus-asm")
             )
         ),
     shell:
@@ -197,12 +180,14 @@ rule collect_assemblies:
 
 rule assemble:
     input:
-        r1=Path(run_tmpdir, "reads", "{sample}_R1.fastq.gz"),
-        r2=Path(run_tmpdir, "reads", "{sample}_R2.fastq.gz"),
+        r1=Path(outdir, "reads", "{sample}_R1.fastq.gz"),
+        r2=Path(outdir, "reads", "{sample}_R2.fastq.gz"),
     output:
         outdir=directory(
             Path(outdir, "02_assemblies", "{sample}", "{sample}__captus-asm")
         ),
+    shadow:
+        "minimal"
     params:
         outdir=lambda wildcards, output: Path(output.outdir).parent,
     log:
@@ -219,7 +204,7 @@ rule assemble:
         "captus_assembly assemble "
         "--reads {input.r1} {input.r2} "
         "--out {params.outdir} "
-        '--tmp_dir "$( mktemp -d -p ' + run_tmpdir.as_posix() + ' )" '
+        '--tmp_dir "$( mktemp -d )" '
         '--ram "$(( {resources.mem_mb}/1000 ))" '
         "--threads {threads} "
         "&> {log}"
@@ -229,15 +214,18 @@ rule collect_reads:
     input:
         Path(read_directory, "{sample}.r{read}.fastq.gz"),
     output:
-        temp(Path(run_tmpdir, "reads", "{sample}_R{read}.fastq.gz")),
+        temp(Path(outdir, "reads", "{sample}_R{read}.fastq.gz")),
     shell:
         "ln -s "
         '"$( readlink -f {input} )" '
         '"$( readlink -f {output} )" '
 
 
-rule target:
+# this is to make sure the namelist ends with a newline
+checkpoint collect_namelist:
     input:
-        rules.extract.output,
-        rules.align.output,
-    default_target: True
+        namelist,
+    output:
+        temp(Path(outdir, "namelist.captus.txt")),
+    shell:
+        "(cat {input} && echo) > {output}"
