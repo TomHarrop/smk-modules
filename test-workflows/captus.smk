@@ -32,52 +32,22 @@ captus_snakefile = "../modules/captus/Snakefile"
 # )
 
 
+# note. this does NOT work well with `prefix:` because of the way captus parses
+# directory arguments. better to use the outdir where possible.
+
 module captus:
     snakefile:
         captus_snakefile
     config:
         {
-            "namelist": Path("namelist.txt"),
-            "read_directory": Path("inputs"),
-            "target_file": "targetfile.fasta",
+            "namelist": Path("test-data", "captus", "namelist.txt"),
+            "read_directory": Path("test-output", "captus", "inputs"),
+            "target_file": target_file,
+            "outdir": Path("test-output", "captus"),
         }
-    prefix:
-        Path("test-output", "captus")
 
 
 use rule * from captus as captus_*
-
-
-rule set_up_captus_inputs:
-    input:
-        expand(
-            Path(
-                "test-output",
-                "captus",
-                "inputs",
-                "{sample}.r{r}.fastq.gz",
-            ),
-            sample=all_samples,
-            r=["1", "2"],
-        ),
-        target_file=target_file,
-        namelist=Path("test-data", "captus", "namelist.txt"),
-    output:
-        target_file=temp(
-            Path(
-                "test-output",
-                "captus",
-                "targetfile.fasta",
-            )
-        ),
-        namelist=temp(Path("test-output", "captus", "namelist.txt")),
-    shell:
-        "ln -s "
-        "$(readlink -f {input.target_file} ) "
-        "$(readlink -f {output.target_file} ) ; "
-        "ln -s "
-        "$(readlink -f {input.namelist} ) "
-        "$(readlink -f {output.namelist} ) ; "
 
 
 rule set_up_read_files:
@@ -95,19 +65,3 @@ rule generate_namelist:
     run:
         with open(output[0], "wt") as f:
             f.write("\n".join(all_samples))
-
-
-# rule target:
-#     input:
-#         rules.captus_target.input,
-#         # Path(
-#         #     "test-output",
-#         #     "captus",
-#         #     "04_alignments",
-#         #     "04_alignments",
-#         #     "02_untrimmed",
-#         #     "06_informed",
-#         #     "03_coding_MIT",
-#         #     "02_NT",
-#         # ),
-#     default_target: True

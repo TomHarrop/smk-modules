@@ -86,16 +86,14 @@ wildcard_constraints:
 rule align:
     input:
         multiext(
-            Path(
-                outdir, "03_extractions", "captus-assembly_extract"
-            ).as_posix(),
+            Path("03_extractions", "captus-assembly_extract").as_posix(),
             ".log",
             ".refs.json",
             ".report.html",
             ".stats.tsv",
         ),
         extrs=get_align_extrs,
-        clustering_data=Path(outdir, "03_extractions", "02_clustering_data"),
+        clustering_data=Path("03_extractions", "02_clustering_data"),
     output:
         stats=expand(
             Path(outdir, "04_alignments", "{statsfile}.tsv"),
@@ -135,23 +133,18 @@ checkpoint extract:
         target_file=target_file,
     output:
         multiext(
-            Path(
-                outdir, "03_extractions", "captus-assembly_extract"
-            ).as_posix(),
+            Path("03_extractions", "captus-assembly_extract").as_posix(),
             ".log",
             ".refs.json",
             ".report.html",
             ".stats.tsv",
         ),
-        outdir=expand(Path("05_extract-input")),
-        clustering_data=directory(
-            Path(outdir, "03_extractions", "02_clustering_data")
-        ),
+        clustering_data=directory(Path("03_extractions", "02_clustering_data")),
     shadow:
         "minimal"
     params:
         asms=lambda wildcards, input: Path(input.asms[0]).parent,
-        outdir=lambda wildcards, output: Path(output.outdir[0]).parent,
+        outdir=lambda wildcards, output: Path(outdir, "03_extractions"),
     log:
         Path(logdir, "extract.log"),
     benchmark:
