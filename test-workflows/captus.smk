@@ -4,6 +4,27 @@ from pathlib import Path
 import pandas as pd
 import tempfile
 
+
+def get_captus_output(wildcards):
+    align_outdir = checkpoints.align.get(**wildcards).output["outdir"]
+    return [
+        Path(
+            output_directory,
+            "04_alignments",
+            "02_untrimmed",
+            "06_informed",
+            "03_coding_MIT",
+        ),
+        Path(
+            output_directory,
+            "04_alignments",
+            "03_trimmed",
+            "06_informed",
+            "01_coding_NUC",
+        ),
+    ]
+
+
 sample_data = Path("test-data", "hybpiper", "samples.csv")
 target_file = Path("test-data", "hybpiper", "combined_targetfiles.fixed.fasta")
 read_directory = Path("test-data", "captus", "reads")
@@ -25,28 +46,14 @@ captus_snakefile = "../modules/captus/Snakefile"
 # )
 
 
-rule my_target:
+# the final rule is a checkpoint, so you have to ping it.
+rule target:
     input:
-        Path(
-            output_directory,
-            "04_alignments",
-            "02_untrimmed",
-            "06_informed",
-            "03_coding_MIT",
-        ),
-        Path(
-            output_directory,
-            "04_alignments",
-            "03_trimmed",
-            "06_informed",
-            "01_coding_NUC",
-        ),
+        get_captus_output,
 
 
 # note. this does NOT work well with `prefix:` because of the way captus parses
 # directory arguments. better to use the outdir where possible.
-
-
 module captus:
     snakefile:
         captus_snakefile
