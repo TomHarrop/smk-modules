@@ -8,6 +8,14 @@ from functools import cache
 #############
 
 
+def find_cluster_file(wildcards):
+    extraction_dir = get_extraction_outdir(wildcards)
+    return [
+        Path(x).resolve()
+        for x in Path(extraction_dir).rglob("*_captus_cluster_refs.fasta")
+    ][0]
+
+
 def get_align_output_files(wildcards):
     align_outdir = checkpoints.align.get(**wildcards).output["outdir"]
     return [x for x in Path(align_outdir).glob("**")]
@@ -32,7 +40,6 @@ def get_align_stats(wildcards):
     return multiext(
         Path(extraction_dir, "captus-assembly_extract").as_posix(),
         ".log",
-        ".refs.json",
         ".report.html",
         ".stats.tsv",
     )
@@ -52,6 +59,11 @@ def get_extract_asms(wildcards):
     return [Path(outdir, x) for x in sample_files]
 
 
+def get_refs_json(wildcards):
+    extraction_dir = get_extraction_outdir(wildcards)
+    return Path(extraction_dir, "captus-assembly_extract.refs.json.tmp")
+
+
 def get_sample_list(wildcards):
     namelist_file = checkpoints.collect_namelist.get(**wildcards).output[0]
     return read_namelist(namelist_file)
@@ -69,6 +81,7 @@ def read_namelist(namelist):
 
 # containers
 captus = "docker://quay.io/biocontainers/captus:1.0.1--pyhdfd78af_2"
+python = "docker://python:3.10.14"
 
 # set up directories
 outdir = Path(config["outdir"] if "outdir" in config else ".")
@@ -97,17 +110,14 @@ rule target:
     input:
         get_align_output_files,
         get_align_stats,
+        Path(outdir, "captus-assembly_extract.refs.json.fixed"),
 
 
 checkpoint align:
     input:
-        extrs=get_align_extrs,
-        stats=get_align_stats,
-        clustering_data=get_align_clustering_data,
+        Path(outdir, "06_align-input"),
     output:
         outdir=directory(Path(outdir, "04_alignments")),
-    params:
-        extr_dir=lambda wildcards: get_extraction_outdir(wildcards),
     log:
         Path(logdir, "align.log"),
     benchmark:
@@ -122,11 +132,42 @@ checkpoint align:
         captus
     shell:
         "captus_assembly align "
-        "--captus_extractions_dir {params.extr_dir} "
+        "--captus_extractions_dir {input} "
         "--out {output.outdir} "
         '--ram "$(( {resources.mem_mb}/1000 ))" '
         "--threads {threads} "
         "&> {log}"
+
+
+rule set_up_align_input:
+    input:
+        fixed_refs=Path(outdir, "captus-assembly_extract.refs.json.fixed"),
+        extrs=get_align_extrs,
+        stats=get_align_stats,
+        clustering_data=get_align_clustering_data,
+        input_directory=get_extraction_outdir,
+    output:
+        temp(directory(Path(outdir, "06_align-input"))),
+    shell:
+        "ln -sf "
+        "$( readlink -f {input.input_directory} ) "
+        "$( readlink -f {output} ) ; "
+        "ln -sf "
+        "$( readlink -f {input.fixed_refs} ) "
+        "$( readlink -f {output} )/captus-assembly_extract.refs.json ; "
+
+
+rule replace_temporary_paths:
+    input:
+        get_refs_json,
+    output:
+        Path(outdir, "captus-assembly_extract.refs.json.fixed"),
+    params:
+        correct_path=lambda wildcards: find_cluster_file(wildcards),
+    container:
+        python
+    script:
+        "scripts/replace_temporary_paths.py"
 
 
 checkpoint extract:
@@ -159,8 +200,9 @@ checkpoint extract:
         "--mmseqs_method easy-cluster "
         '--ram "$(( {resources.mem_mb}/1000 ))" '
         "--threads {threads} "
-        "&> {log}"
-        " ; ls -lh {output.outdir}/*"
+        "&> {log} "
+        "; mv {output.outdir}/captus-assembly_extract.refs.json "
+        "{output.outdir}/captus-assembly_extract.refs.json.tmp"
 
 
 rule collect_assemblies:
