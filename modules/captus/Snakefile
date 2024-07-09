@@ -20,10 +20,11 @@ def get_extraction_outdir(wildcards):
 def get_align_extrs(wildcards):
     extraction_dir = get_extraction_outdir(wildcards)
     all_samples = get_sample_list(wildcards)
-    return expand(
-        Path(extraction_dir, "{sample}__captus-ext"),
+    sample_files = expand(
+        Path("{sample}__captus-ext"),
         sample=all_samples,
     )
+    return [Path(extraction_dir, x) for x in sample_files]
 
 
 def get_align_stats(wildcards):
@@ -44,10 +45,11 @@ def get_align_clustering_data(wildcards):
 
 def get_extract_asms(wildcards):
     all_samples = get_sample_list(wildcards)
-    return expand(
-        Path(outdir, "05_extract-input", "{sample}__captus-asm"),
+    sample_files = expand(
+        Path("05_extract-input", "{sample}__captus-asm"),
         sample=all_samples,
     )
+    return [Path(outdir, x) for x in sample_files]
 
 
 def get_sample_list(wildcards):
