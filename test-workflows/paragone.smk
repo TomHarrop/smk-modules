@@ -8,12 +8,12 @@ external_outgroups = Path("test-data", "paragone", "external_outgroups.fasta")
 internal_outgroup = "80974"  # taxon id?
 
 
-# paragone_snakefile = github(
-#     "tomharrop/smk-modules",
-#     path="modules/paragone/Snakefile",
-#     tag="0.0.22",
-# )
-paragone_snakefile = "../modules/paragone/Snakefile"
+paragone_snakefile = github(
+    "tomharrop/smk-modules",
+    path="modules/paragone/Snakefile",
+    tag="0.2.00",
+)
+# paragone_snakefile = "../modules/paragone/Snakefile"
 
 
 module paragone_external:

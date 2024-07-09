@@ -10,12 +10,12 @@ output_directory = Path(
 
 datasets = [x.name for x in test_alignments.glob("*") if x.is_dir()]
 
-iqtree_snakefile = "../modules/iqtree/Snakefile"
-# iqtree_snakefile = github(
-#     "tomharrop/smk-modules",
-#     path="modules/iqtree/Snakefile",
-#     tag="0.1.07",
-# )
+# iqtree_snakefile = "../modules/iqtree/Snakefile"
+iqtree_snakefile = github(
+    "tomharrop/smk-modules",
+    path="modules/iqtree/Snakefile",
+    tag="0.2.00",
+)
 
 
 rule target:
