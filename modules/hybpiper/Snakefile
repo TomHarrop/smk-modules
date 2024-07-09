@@ -28,10 +28,11 @@ def get_sample_list(wildcards):
 
 
 def get_sample_files(wildcards):
-    return expand(
-        Path(outdir, "sample_files", "{sample}"),
+    sample_paths = expand(
+        Path("sample_files", "{sample}"),
         sample=get_sample_list(wildcards),
     )
+    return [Path(outdir, x) for x in sample_paths]
 
 
 ###########
