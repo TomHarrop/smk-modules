@@ -18,7 +18,7 @@ def get_extraction_outdir(wildcards):
 
 
 def get_align_extrs(wildcards):
-    extraction_dir = checkpoints.extract.get(**wildcards).output["outdir"]
+    extraction_dir = get_extraction_outdir(wildcards)
     all_samples = get_sample_list(wildcards)
     return expand(
         Path(extraction_dir, "{sample}__captus-ext"),
@@ -27,7 +27,7 @@ def get_align_extrs(wildcards):
 
 
 def get_align_stats(wildcards):
-    extraction_dir = checkpoints.extract.get(**wildcards).output["outdir"]
+    extraction_dir = get_extraction_outdir(wildcards)
     return multiext(
         Path(extraction_dir, "captus-assembly_extract").as_posix(),
         ".log",
@@ -38,7 +38,7 @@ def get_align_stats(wildcards):
 
 
 def get_align_clustering_data(wildcards):
-    extraction_dir = checkpoints.extract.get(**wildcards).output["outdir"]
+    extraction_dir = get_extraction_outdir(wildcards)
     return Path(extraction_dir, "02_clustering_data")
 
 

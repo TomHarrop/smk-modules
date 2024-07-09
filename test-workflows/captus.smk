@@ -17,13 +17,6 @@ all_samples = sorted(
     set(x.stem.split(".")[0] for x in read_directory.glob("*r1.fastq.gz"))
 )
 
-# these are the stats files we want
-statsfiles = [
-    "captus-assembly_align.alignments",
-    "captus-assembly_align.paralogs",
-    "captus-assembly_align.samples",
-]
-
 captus_snakefile = "../modules/captus/Snakefile"
 # captus_snakefile = github(
 #     "tomharrop/smk-modules",
@@ -32,8 +25,27 @@ captus_snakefile = "../modules/captus/Snakefile"
 # )
 
 
+rule my_target:
+    input:
+        Path(
+            output_directory,
+            "04_alignments",
+            "02_untrimmed",
+            "06_informed",
+            "03_coding_MIT",
+        ),
+        Path(
+            output_directory,
+            "04_alignments",
+            "03_trimmed",
+            "06_informed",
+            "01_coding_NUC",
+        ),
+
+
 # note. this does NOT work well with `prefix:` because of the way captus parses
 # directory arguments. better to use the outdir where possible.
+
 
 module captus:
     snakefile:
