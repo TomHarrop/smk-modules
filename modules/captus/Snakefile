@@ -136,7 +136,6 @@ checkpoint align:
         "--out {output.outdir} "
         '--ram "$(( {resources.mem_mb}/1000 ))" '
         "--threads {threads} "
-        "--outgroup QXWF "
         "&> {log}"
 
 
