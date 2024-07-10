@@ -29,7 +29,15 @@ def get_sample_list(wildcards):
 
 def get_sample_files(wildcards):
     sample_paths = expand(
-        Path("sample_files", "{sample}"),
+        Path("assemble", "{sample}.tar"),
+        sample=get_sample_list(wildcards),
+    )
+    return [Path(outdir, x) for x in sample_paths]
+
+
+def get_assembly_archives(wildcards):
+    sample_paths = expand(
+        Path("assemble", "{sample}.tar.gz"),
         sample=get_sample_list(wildcards),
     )
     return [Path(outdir, x) for x in sample_paths]
@@ -77,13 +85,15 @@ tmp_target_file = Path(outdir, "targetfile.fasta")
 fixed_tf = Path(outdir, "target_file.fixed.fasta")
 
 
-# This code block links the sample files in input.sample_files into the cwd so
-# that hybpiper can find them using the namelist. Use it with "shallow:
-# minimal" and make sure you set up the parent param.
-link_sample_folders = (
-    "while IFS= read -r sample; "
-    'do ln -s "{params.parent}/${{sample}}" "./${{sample}}"; '
-    "done < {input.namelist} ; "
+# This code block untars the sample files in input.sample_files into the cwd so
+# that hybpiper can find them using the namelist. Works with "shallow:
+# minimal".
+untar_sample_folders = (
+    "( "
+    "parallel -j {threads} "
+    "./{input.untar_script} "
+    "::: {input.sample_files} "
+    ") &> {log} ; "
 )
 
 
@@ -108,6 +118,7 @@ hybpiper_outputs = [
 rule target:
     input:
         hybpiper_outputs,
+        get_assembly_archives,
 
 
 # Need lots of files here, try to do it in the job tmp area provided to
@@ -138,6 +149,7 @@ rule retrieve_paralogs:
         target=fixed_tf,
         namelist=Path(outdir, "namelist.txt"),
         sample_files=get_sample_files,
+        untar_script=Path(outdir, "untar.sh"),
     output:
         all_dir=temp(
             directory(Path(outdir, "hybpiper_results", "paralogs.all"))
@@ -158,12 +170,13 @@ rule retrieve_paralogs:
         Path(logdir, "retrieve_paralogs.log"),
     benchmark:
         Path(logdir, "retrieve_paralogs.benchmark.log")
+    threads: lambda wildcards, attempt: 16 * attempt
     resources:
         time=lambda wildcards, attempt: 120 * attempt,
     container:
         hybpiper
     shell:
-        f"{link_sample_folders} "
+        f"{untar_sample_folders} "
         "hybpiper paralog_retriever "
         "--targetfile_dna {input.target} "
         "--fasta_dir_all paralogs.all "
@@ -194,6 +207,7 @@ rule retrieve_sequences:
         target=fixed_tf,
         namelist=Path(outdir, "namelist.txt"),
         sample_files=get_sample_files,
+        untar_script=Path(outdir, "untar.sh"),
     output:
         fasta_dir=temp(
             directory(Path(outdir, "hybpiper_results", "sequences.{type}"))
@@ -206,12 +220,13 @@ rule retrieve_sequences:
         Path(logdir, "retrieve_sequences.{type}.log"),
     benchmark:
         Path(logdir, "retrieve_sequences.{type}.benchmark.log")
+    threads: lambda wildcards, attempt: 16 * attempt
     resources:
         time=lambda wildcards, attempt: 120 * attempt,
     container:
         hybpiper
     shell:
-        f"{link_sample_folders} "
+        f"{untar_sample_folders} "
         "hybpiper retrieve_sequences "
         "--targetfile_dna {input.target} "
         "--sample_names {input.namelist} "
@@ -226,6 +241,7 @@ rule stats:
         target=fixed_tf,
         namelist=Path(outdir, "namelist.txt"),
         sample_files=get_sample_files,
+        untar_script=Path(outdir, "untar.sh"),
     output:
         seq_lengths=Path(outdir, "seq_lengths.{type}.tsv"),
         stats=Path(outdir, "hybpiper_stats.{type}.tsv"),
@@ -237,12 +253,13 @@ rule stats:
         Path(logdir, "stats.{type}.log"),
     benchmark:
         Path(logdir, "stats.{type}.benchmark.log")
+    threads: lambda wildcards, attempt: 16 * attempt
     resources:
         time=lambda wildcards, attempt: 120 * attempt,
     container:
         hybpiper
     shell:
-        f"{link_sample_folders} "
+        f"{untar_sample_folders} "
         "hybpiper stats "
         "--targetfile_dna {input.target} "
         "--stats_filename hybpiper_stats.{wildcards.type} "
@@ -252,26 +269,6 @@ rule stats:
         "&> {log} "
         "&& mv hybpiper_stats.{wildcards.type}.tsv {output.stats} "
         "&& mv seq_lengths.{wildcards.type}.tsv {output.seq_lengths} "
-
-
-rule unarchive_results:
-    input:
-        tarfile=Path(outdir, "assemble", "{sample}.tar.gz"),
-    output:
-        folder=temp(directory(Path(outdir, "sample_files", "{sample}"))),
-    shadow:
-        "minimal"
-    resources:
-        time=lambda wildcards, attempt: 20 * attempt,
-    container:
-        hybpiper
-    shell:
-        "mkdir -p {output.folder} "
-        "&& "
-        "gzip -dc {input.tarfile} "
-        "| tar -xf - "
-        "--strip-components=1 "
-        "-C {output.folder} "
 
 
 # Run hybpiper and compress the resuilts
@@ -335,7 +332,7 @@ rule assemble:
         "{wildcards.sample}"
         "_genes_derived_from_putative_chimeric_stitched_contig.csv"
         "; "
-        "tar -cv {wildcards.sample} >> {output.tarfile} "
+        "tar -cvf {output.tarfile} --directory {wildcards.sample} . "
         "2>> {log} "
 
 
@@ -424,3 +421,17 @@ checkpoint collect_namelist:
         Path(outdir, "namelist.txt"),
     shell:
         "(cat {input} && echo) > {output}"
+
+
+# this is for parallel untarring
+rule generate_untar_script:
+    output:
+        temp(Path(outdir, "untar.sh")),
+    shell:
+        "echo '#!/bin/bash' > {output} ; "
+        "echo 'set -eux' >> {output} ; "
+        "echo 'tar_file=\"${{1}}\"' >> {output} ; "
+        'echo \'base_name="$(basename "${{tar_file}}" .tar)"\' >> {output} ; '
+        "echo 'mkdir -p \"${{base_name}}\"' >> {output} ; "
+        'echo \'tar -xf "${{tar_file}}" -C "${{base_name}}"\' >> {output} ; '
+        "chmod +x {output} "

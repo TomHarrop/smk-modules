@@ -19,7 +19,7 @@ all_samples = sorted(set(samples.index))
 hybpiper_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/hybpiper/Snakefile",
-    tag="0.2.01",
+    tag="0.2.04",
 )
 # hybpiper_snakefile = "../modules/hybpiper/Snakefile"
 
@@ -45,3 +45,9 @@ checkpoint generate_namelist:
     run:
         with open(output[0], "wt") as f:
             f.write("\n".join(all_samples))
+
+
+rule target:
+    default_target: True
+    input:
+        rules.hybpiper_target.input,
