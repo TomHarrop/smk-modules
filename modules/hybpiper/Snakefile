@@ -27,11 +27,15 @@ def get_sample_list(wildcards):
     return read_namelist(namelist_file)
 
 
+# NOTE. This function will check for completed assembly files WHEN THE WORKFLOW
+# STARTS. It will not find them if they are produced after startup.
 def get_sample_files(wildcards):
-    sample_paths = expand(
-        Path("assemble", "{sample}.tar"),
-        sample=get_sample_list(wildcards),
-    )
+    sample_paths = []
+    for sample in get_sample_list(wildcards):
+        if Path(outdir, "assemble", f"{sample}.tar.gz").resolve().is_file():
+            sample_paths.append(Path("assemble", f"{sample}.tar.gz"))
+        else:
+            sample_paths.append(Path("assemble", f"{sample}.tar"))
     return [Path(outdir, x) for x in sample_paths]
 
 
@@ -271,7 +275,8 @@ rule stats:
         "&& mv seq_lengths.{wildcards.type}.tsv {output.seq_lengths} "
 
 
-# Run hybpiper and compress the resuilts
+# Run hybpiper and compress the results. These will be re-used in subsequent
+# workflow runs, if they're present when the workflow starts.
 rule pigz:
     input:
         Path(outdir, "assemble", "{sample}.tar"),
@@ -423,15 +428,29 @@ checkpoint collect_namelist:
         "(cat {input} && echo) > {output}"
 
 
-# this is for parallel untarring
+# This script will check if the file is a .tar or .tar.gz and expand the
+# archives in parallel.
 rule generate_untar_script:
     output:
         temp(Path(outdir, "untar.sh")),
     shell:
-        "echo '#!/bin/bash' > {output} ; "
-        "echo 'set -eux' >> {output} ; "
-        "echo 'tar_file=\"${{1}}\"' >> {output} ; "
-        'echo \'base_name="$(basename "${{tar_file}}" .tar)"\' >> {output} ; '
-        "echo 'mkdir -p \"${{base_name}}\"' >> {output} ; "
-        'echo \'tar -xf "${{tar_file}}" -C "${{base_name}}"\' >> {output} ; '
-        "chmod +x {output} "
+        """
+        cat << 'EOF' > {output}
+#!/bin/bash
+set -eux
+tar_file=\"${{1}}\"
+if [[ \"${{tar_file}}\" == *.tar.gz ]]; then
+    flags=\"zxf\" 
+    base_name=\"$(basename \"${{tar_file}}\" .tar.gz)\"
+elif [[ \"${{tar_file}}\" == *.tar ]]; then
+    flags=\"xf\" 
+    base_name=\"$(basename \"${{tar_file}}\" .tar)\"
+fi
+
+mkdir -p \"${{base_name}}\"
+tar \"-${{flags}}\" \"${{tar_file}}\" -C \"${{base_name}}\"
+
+EOF
+
+        chmod +x {output} 
+        """
