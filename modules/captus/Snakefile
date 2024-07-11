@@ -193,7 +193,7 @@ checkpoint extract:
     shell:
         "captus_assembly extract "
         "--captus_assemblies_dir {params.asms} "
-        "--out {output.outdir} "
+        "--out {output.outdir}/. "
         "--nuc_refs {input.target_file} "
         "--mit_refs SeedPlantsMIT "
         "--cluster_leftovers "
