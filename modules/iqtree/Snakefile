@@ -54,7 +54,7 @@ logdir = Path(outdir, "logs")
 
 # catch alignmnt directory
 alignment_directory = f"{config['alignment_directory']}"
-logger.info(f"Caught alignment_directory: {alignment_directory}")
+logger.debug(f"Caught alignment_directory: {alignment_directory}")
 
 
 rule target:
