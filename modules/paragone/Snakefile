@@ -2,29 +2,11 @@
 
 from pathlib import Path
 from snakemake.logging import logger
-import tempfile
 
 
 #############
 # FUNCTIONS #
 #############
-
-
-def get_all_values(d):
-    values = []
-
-    def extract_values(d):
-        if isinstance(d, dict):
-            for value in d.values():
-                extract_values(value)
-        elif isinstance(d, list):
-            for item in d:
-                extract_values(item)
-        else:
-            values.append(d)
-
-    extract_values(d)
-    return values
 
 
 def get_paragone_input(wildcards):
@@ -38,18 +20,18 @@ def get_paragone_input(wildcards):
 
 
 def get_paragone_params(wildcards, input, output):
-    param_dict = {"paralog_sequences": Path(input.paralog_sequences)}
+    param_dict = {}
     try:
         eo_path = Path(input.external_outgroups)
-        param_dict[
-            "external_outgroups"
-        ] = f"--external_outgroups_file {eo_path} "
+        param_dict["external_outgroups"] = (
+            f"--external_outgroups_file {eo_path} "
+        )
     except AttributeError:
         param_dict["external_outgroups"] = ""
     try:
-        param_dict[
-            "internal_outgroup"
-        ] = f"--internal_outgroup {internal_outgroup} "
+        param_dict["internal_outgroup"] = (
+            f"--internal_outgroup {internal_outgroup} "
+        )
     except NameError:
         param_dict["internal_outgroup"] = ""
     logger.debug(param_dict)
@@ -96,71 +78,28 @@ logdir = Path(outdir, "logs")
 
 paragone_directory = Path(outdir, "paragone")
 
-# This manifest of output directories is used to tell snakemake which files to
-# pick up from the shadow directory. The strategy is to touch a timestamp file
-# (`touch start_time`) before running paragone, then mv everything created
-# after that into the shadow directory.
-paragone_output_directories = {
-    "check_and_align": [
-        Path(paragone_directory, "00_1_logs_and_reports"),
-        Path(
-            paragone_directory,
-            "01_input_paralog_fasta_with_sanitised_filenames",
-        ),
-        Path(paragone_directory, "02_alignments"),
-        Path(paragone_directory, "03_alignments_trimmed"),
-        Path(paragone_directory, "04_alignments_trimmed_hmmcleaned"),
-    ],
-    "alignment_to_tree": [
-        Path(paragone_directory, "00_2_logs_and_reports"),
-        Path(paragone_directory, "05_trees_pre_quality_control"),
-    ],
-    "qc_trees_and_extract_fasta": [
-        Path(paragone_directory, "00_3_logs_and_reports"),
-        Path(paragone_directory, "06_trees_trimmed"),
-        Path(paragone_directory, "07_trees_trimmed_masked"),
-        Path(paragone_directory, "08_trees_trimmed_masked_cut"),
-        Path(paragone_directory, "09_sequences_from_qc_trees"),
-    ],
-    "align_selected_and_tree": [
-        Path(paragone_directory, "00_4_logs_and_reports"),
-        Path(paragone_directory, "10_sequences_from_qc_outgroups_added"),
-        Path(paragone_directory, "11_pre_paralog_resolution_alignments"),
-        Path(paragone_directory, "13_pre_paralog_resolution_trees"),
-        Path(
-            paragone_directory,
-            "12_pre_paralog_resolution_alignments_trimmed",
-        ),
-    ],
-    "prune_paralogs": [
-        Path(paragone_directory, "00_5_logs_and_reports"),
-        Path(paragone_directory, "14_pruned_MO"),
-        Path(paragone_directory, "15_pruned_MI"),
-        Path(paragone_directory, "16_pruned_RT"),
-    ],
-    "final_alignments": [
-        Path(paragone_directory, "00_6_logs_and_reports"),
-        Path(paragone_directory, "17_selected_sequences_MO"),
-        Path(paragone_directory, "18_selected_sequences_MI"),
-        Path(paragone_directory, "19_selected_sequences_RT"),
-        Path(paragone_directory, "20_MO_stripped_names"),
-        Path(paragone_directory, "21_MI_stripped_names"),
-        Path(paragone_directory, "22_RT_stripped_names"),
-        Path(paragone_directory, "23_MO_final_alignments"),
-        Path(paragone_directory, "24_MI_final_alignments"),
-        Path(paragone_directory, "25_RT_final_alignments"),
-        Path(paragone_directory, "26_MO_final_alignments_trimmed"),
-        Path(paragone_directory, "27_MI_final_alignments_trimmed"),
-        Path(paragone_directory, "28_RT_final_alignments_trimmed"),
-    ],
-}
-
-
 alignment_directories = [
-    "26_MO_final_alignments_trimmed",
-    "27_MI_final_alignments_trimmed",
-    "28_RT_final_alignments_trimmed",
+    Path(outdir, x)
+    for x in [
+        "26_MO_final_alignments_trimmed",
+        "27_MI_final_alignments_trimmed",
+        "28_RT_final_alignments_trimmed",
+    ]
 ]
+
+catch_output = (
+    "mv 00_logs_and_reports {rule}/ ; "
+    "find . -maxdepth 1 -mindepth 1 -newer start_time ! -name {rule} "
+    "-exec mv {{}} {rule}/ \; ; "
+    "tar -cf {output.tarfile} "
+    "--directory {rule} . "
+)
+
+prepare_input = (
+    "for tarfile in {input.tarfiles} ; "
+    'do tar --strip-components=1 -xf "${{tarfile}}" ; done ; '
+    "mkdir {rule} ; touch start_time "
+)
 
 
 #########
@@ -171,16 +110,22 @@ alignment_directories = [
 rule target:
     input:
         Path(outdir, "intermediate_files.tar.gz"),
-        [Path(outdir, x) for x in alignment_directories],
+        alignment_directories,
 
 
 rule collect_paragone_intermediate_files:
     input:
-        get_all_values(paragone_output_directories),
+        tarfiles=[
+            Path(paragone_directory, "align_selected_and_tree.tar"),
+            Path(paragone_directory, "alignment_to_tree.tar"),
+            Path(paragone_directory, "check_and_align.tar"),
+            Path(paragone_directory, "prune_paralogs.tar"),
+            Path(paragone_directory, "qc_trees_and_extract_fasta.tar"),
+        ],
+        # this goes last because it's got the logs and reports
+        final_alignments=Path(paragone_directory, "final_alignments.tar"),
     output:
         Path(outdir, "intermediate_files.tar.gz"),
-    params:
-        wd=lambda wildcards, input: Path(input[0]).parent.parent,
     log:
         Path(logdir, "collect_paragone_intermediate_files.log"),
     threads: workflow.cores
@@ -192,42 +137,41 @@ rule collect_paragone_intermediate_files:
     container:
         pigz
     shell:
-        "tar --directory {params.wd} -cv . "
-        "2> {log} "
-        "| pigz -p {threads} -9 >{output}"
+        "mkdir {rule} ; "
+        "for tarfile in {input.tarfiles} ; "
+        'do tar -xf "${{tarfile}}" -C {rule} ; done ; '
+        "tar -xf {input.final_alignments} -C {rule} ; "
+        "tar --directory {rule} -c . | pigz -p {threads} -9 >{output}"
 
 
 rule collect_alignments:
     input:
-        Path(paragone_directory, "{alignment}"),
+        tarfile=Path(paragone_directory, "final_alignments.tar"),
     output:
-        directory(Path(outdir, "{alignment}")),
-    wildcard_constraints:
-        alignment="|".join(alignment_directories),
+        [directory(x) for x in alignment_directories],
+    params:
+        outdir=lambda wildcards, output: Path(output[0]).parent,
     resources:
         mem_mb=lambda wildcards, attempt: 8e3 * attempt,
         time=lambda wildcards, attempt: 10 * attempt,
+    shadow:
+        "minimal"
     container:
         pigz
     shell:
-        "cp -r {input} {output}"
+        "tar -xf {input.tarfile} "
+        "-C {params.outdir} "
 
 
 rule final_alignments:
     input:
-        mo=Path(paragone_directory, "14_pruned_MO"),
-        mi=Path(paragone_directory, "15_pruned_MI"),
-        rt=Path(paragone_directory, "16_pruned_RT"),
-        alignments=Path(
-            paragone_directory, "11_pre_paralog_resolution_alignments"
-        ),
-    output:
-        [
-            temp(directory(x))
-            for x in paragone_output_directories["final_alignments"]
+        tarfiles=[
+            Path(paragone_directory, "prune_paralogs.tar"),
+            Path(paragone_directory, "align_selected_and_tree.tar"),
         ],
+    output:
+        tarfile=temp(Path(paragone_directory, "final_alignments.tar")),
     params:
-        outdir=lambda wildcards, output: Path(output[0]).parent,
         threads=lambda wildcards, threads: threads // pool,
     log:
         Path(logdir, "final_alignments.log"),
@@ -240,36 +184,21 @@ rule final_alignments:
     container:
         paragone
     shell:
-        "ln -s $(readlink -f {input.mo} ) ./ ; "
-        "ln -s $(readlink -f {input.mi} ) ./ ; "
-        "ln -s $(readlink -f {input.rt} ) ./ ; "
-        "ln -s $(readlink -f {input.alignments} ) ./ ; "
-        "touch start_time ; "
+        f"{prepare_input} ; "
         "paragone final_alignments "
         "--mo --rt --mi "
         "--pool " + str(pool) + " "
         "--threads {params.threads} "
         "--keep_intermediate_files "
         "&> {log} ; "
-        "mv 00_logs_and_reports {params.outdir}/00_6_logs_and_reports ; "
-        "find . -maxdepth 1 -mindepth 1 -newer start_time "
-        "-exec mv {{}} {params.outdir} \; "
+        f"{catch_output}"
 
 
 rule prune_paralogs:
     input:
-        trees=Path(paragone_directory, "13_pre_paralog_resolution_trees"),
-        groups_list=Path(
-            paragone_directory,
-            "in_and_outgroups_list.tsv",
-        ),
+        tarfiles=Path(paragone_directory, "align_selected_and_tree.tar"),
     output:
-        [
-            temp(directory(x))
-            for x in paragone_output_directories["prune_paralogs"]
-        ],
-    params:
-        outdir=lambda wildcards, output: Path(output[0]).parent,
+        tarfile=temp(Path(paragone_directory, "prune_paralogs.tar")),
     log:
         Path(logdir, "prune_paralogs.log"),
     threads: 1
@@ -281,43 +210,23 @@ rule prune_paralogs:
     container:
         paragone
     shell:
-        "ln -s $(readlink -f {input.trees} ) ./ ; "
-        "mkdir -p ./00_logs_and_reports/reports/ ; "
-        "ln -s $(readlink -f {input.groups_list} ) ./00_logs_and_reports/reports/ ; "
-        "touch start_time ; "
+        f"{prepare_input} ; "
         "paragone "
         "prune_paralogs "
         "--mo --rt --mi "
         "&> {log} ; "
-        "mv 00_logs_and_reports {params.outdir}/00_5_logs_and_reports ; "
-        "find . -maxdepth 1 -mindepth 1 -newer start_time "
-        "-exec mv {{}} {params.outdir} \; "
+        f"{catch_output}"
 
 
 rule align_selected_and_tree:
     input:
-        sequences=Path(paragone_directory, "09_sequences_from_qc_trees"),
-        alignments=Path(paragone_directory, "04_alignments_trimmed_hmmcleaned"),
-        taxon_list=Path(
-            paragone_directory,
-            "outgroup_taxon_list.tsv",
-        ),
-    output:
-        [
-            temp(directory(x))
-            for x in paragone_output_directories["align_selected_and_tree"]
+        tarfiles=[
+            Path(paragone_directory, "check_and_align.tar"),
+            Path(paragone_directory, "qc_trees_and_extract_fasta.tar"),
         ],
-        groups_list=temp(
-            Path(
-                paragone_directory,
-                "in_and_outgroups_list.tsv",
-            )
-        ),
+    output:
+        tarfile=temp(Path(paragone_directory, "align_selected_and_tree.tar")),
     params:
-        input_logdir=lambda wildcards, input: Path(
-            input.taxon_list
-        ).parent.parent,
-        outdir=lambda wildcards, output: Path(output[0]).parent,
         threads=lambda wildcards, threads: threads // pool,
     log:
         Path(logdir, "align_selected_and_tree.log"),
@@ -330,33 +239,27 @@ rule align_selected_and_tree:
     container:
         paragone
     shell:
-        "ln -s $(readlink -f {input.sequences} ) ./ ; "
-        "mkdir -p ./00_logs_and_reports/reports/ ; "
-        "ln -s $(readlink -f {input.taxon_list} ) ./00_logs_and_reports/reports/ ; "
+        f"{prepare_input} ; "
         "touch start_time ; "
         "paragone "
-        "align_selected_and_tree {input.alignments} "
+        "align_selected_and_tree 04_alignments_trimmed_hmmcleaned "
         "--use_fasttree "
         "--pool " + str(pool) + " "
         "--threads {params.threads} "
         "&> {log} ; "
-        "cp 00_logs_and_reports/reports/in_and_outgroups_list.tsv {output.groups_list} ; "
-        "mv 00_logs_and_reports {params.outdir}/00_4_logs_and_reports ; "
-        "find . -maxdepth 1 -mindepth 1 -newer start_time "
-        "-exec mv {{}} {params.outdir} \; "
+        f"{catch_output}"
 
 
 rule qc_trees_and_extract_fasta:
     input:
-        alignments=Path(paragone_directory, "04_alignments_trimmed_hmmcleaned"),
-        trees=Path(paragone_directory, "05_trees_pre_quality_control"),
-    output:
-        [
-            temp(directory(x))
-            for x in paragone_output_directories["qc_trees_and_extract_fasta"]
+        tarfiles=[
+            Path(paragone_directory, "check_and_align.tar"),
+            Path(paragone_directory, "alignment_to_tree.tar"),
         ],
-    params:
-        outdir=lambda wildcards, output: Path(output[0]).parent,
+    output:
+        tarfile=temp(
+            Path(paragone_directory, "qc_trees_and_extract_fasta.tar")
+        ),
     log:
         Path(logdir, "qc_trees_and_extract_fasta.log"),
     threads: 1
@@ -368,29 +271,22 @@ rule qc_trees_and_extract_fasta:
     container:
         paragone
     shell:
-        "ln -s $(readlink -f {input.trees} ) ./ ; "
-        "touch start_time ; "
+        f"{prepare_input} ; "
         "paragone "
         "qc_trees_and_extract_fasta "
         "--treeshrink_q_value 0.20 "
         "--cut_deep_paralogs_internal_branch_length_cutoff 0.04 "
-        "{input.alignments} "
+        "04_alignments_trimmed_hmmcleaned "
         "&> {log} ; "
-        "mv 00_logs_and_reports {params.outdir}/00_3_logs_and_reports ; "
-        "find . -maxdepth 1 -mindepth 1 -newer start_time "
-        "-exec mv {{}} {params.outdir} \; "
+        f"{catch_output}"
 
 
 rule alignment_to_tree:
     input:
-        alignments=Path(paragone_directory, "04_alignments_trimmed_hmmcleaned"),
+        tarfiles=Path(paragone_directory, "check_and_align.tar"),
     output:
-        [
-            temp(directory(x))
-            for x in paragone_output_directories["alignment_to_tree"]
-        ],
+        tarfile=temp(Path(paragone_directory, "alignment_to_tree.tar")),
     params:
-        outdir=lambda wildcards, output: Path(output[0]).parent,
         threads=lambda wildcards, threads: threads // pool,
     log:
         Path(logdir, "alignment_to_tree.log"),
@@ -403,33 +299,23 @@ rule alignment_to_tree:
     container:
         paragone
     shell:
+        f"{prepare_input} ; "
         "paragone "
-        "alignment_to_tree {input.alignments} "
+        "alignment_to_tree 04_alignments_trimmed_hmmcleaned "
         "--use_fasttree "
         "--pool " + str(pool) + " "
         "--threads {params.threads} "
         "&> {log} ; "
-        "mv 00_logs_and_reports {params.outdir}/00_2_logs_and_reports ; "
-        "mv 05_trees_pre_quality_control {params.outdir}"
+        f"{catch_output}"
 
 
 rule check_and_align:
     input:
         unpack(get_paragone_input),
     output:
-        [
-            temp(directory(x))
-            for x in paragone_output_directories["check_and_align"]
-        ],
-        outgroup_taxon_list=temp(
-            Path(
-                paragone_directory,
-                "outgroup_taxon_list.tsv",
-            )
-        ),
+        tarfile=temp(Path(paragone_directory, "check_and_align.tar")),
     params:
         get_paragone_params,
-        outdir=lambda wildcards, output: Path(output[0]).parent,
         threads=lambda wildcards, threads: threads // pool,
     log:
         Path(logdir, "check_and_align.log"),
@@ -442,15 +328,12 @@ rule check_and_align:
     container:
         paragone
     shell:
-        "touch start_time ; "
+        "mkdir {rule} ; touch start_time ; "
         "paragone "
-        "check_and_align {params[0][paralog_sequences]} "
+        "check_and_align {input.paralog_sequences} "
         "{params[0][external_outgroups]} "
         "{params[0][internal_outgroup]} "
         "--pool " + str(pool) + " "
         "--threads {params.threads} "
         "&> {log} ; "
-        "cp 00_logs_and_reports/reports/outgroup_taxon_list.tsv {output.outgroup_taxon_list} ; "
-        "mv 00_logs_and_reports {params.outdir}/00_1_logs_and_reports ; "
-        "find . -maxdepth 1 -mindepth 1 -newer start_time "
-        "-exec mv {{}} {params.outdir} \;"
+        f"{catch_output}"

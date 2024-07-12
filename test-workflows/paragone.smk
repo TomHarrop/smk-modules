@@ -11,7 +11,7 @@ internal_outgroup = "80974"  # taxon id?
 paragone_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/paragone/Snakefile",
-    tag="0.2.00",
+    tag="0.2.06",
 )
 # paragone_snakefile = "../modules/paragone/Snakefile"
 
@@ -23,7 +23,6 @@ module paragone_external:
         {
             "external_outgroups": "external_outgroups.fasta",
             "paralog_sequences": "paralog_input",
-            # "outdir": Path("test-output", "paragone", "external"),
             "pool": 3,
         }
     prefix:
@@ -70,10 +69,6 @@ module paragone_internal:
             "outdir": Path("test-output", "paragone", "internal"),
             "pool": 3,
         }
-
-
-# prefix:
-#     Path("test-output", "paragone", "internal")
 
 
 use rule * from paragone_internal as pgint_*
