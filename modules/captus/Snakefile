@@ -23,20 +23,6 @@ def get_align_output_files(wildcards):
     return [x for x in Path(align_outdir).glob("**")]
 
 
-def get_extraction_outdir(wildcards):
-    return checkpoints.extract.get(**wildcards).output["outdir"]
-
-
-def get_align_extrs(wildcards):
-    extraction_dir = get_extraction_outdir(wildcards)
-    all_samples = get_sample_list(wildcards)
-    sample_files = expand(
-        Path("{sample}__captus-ext"),
-        sample=all_samples,
-    )
-    return [Path(extraction_dir, x) for x in sample_files]
-
-
 def get_align_stats(wildcards):
     extraction_dir = get_extraction_outdir(wildcards)
     return multiext(
@@ -47,18 +33,17 @@ def get_align_stats(wildcards):
     )
 
 
-def get_align_clustering_data(wildcards):
-    extraction_dir = get_extraction_outdir(wildcards)
-    return Path(extraction_dir, "02_clustering_data")
-
-
 def get_extract_asms(wildcards):
     all_samples = get_sample_list(wildcards)
     sample_files = expand(
         Path("05_extract-input", "{sample}__captus-asm"),
         sample=all_samples,
     )
-    return [ancient(Path(outdir, x)) for x in sample_files]
+    return [Path(outdir, x) for x in sample_files]
+
+
+def get_extraction_outdir(wildcards):
+    return checkpoints.extract.get(**wildcards).output["outdir"]
 
 
 def get_refs_json(wildcards):
@@ -102,6 +87,10 @@ logger.debug(f"Caught read_directory: {read_directory}")
 target_file = Path(config["target_file"])
 logger.debug(f"Caught target_file: {target_file}")
 
+# Captus translates the target file silently but writes it next to the input,
+# so we can't pick it up as ouput from a shadow rule.
+translated_targets = target_file.with_suffix(".captus.faa")
+
 
 #########
 # RULES #
@@ -117,7 +106,8 @@ rule target:
 
 checkpoint align:
     input:
-        ancient(Path(outdir, "06_align-input")),
+        fixed_refs=Path(outdir, "captus-assembly_extract.refs.json.fixed"),
+        input_directory=Path(outdir, "03_extractions"),
     output:
         outdir=directory(Path(outdir, "04_alignments")),
     log:
@@ -133,30 +123,14 @@ checkpoint align:
     container:
         captus
     shell:
+        "cp $( readlink -f {input.fixed_refs} ) "
+        "{input.input_directory}/captus-assembly_extract.refs.json ; "
         "captus_assembly align "
-        "--captus_extractions_dir {input} "
+        "--captus_extractions_dir {input.input_directory}/ "
         "--out {output.outdir} "
         '--ram "$(( {resources.mem_mb}/1000 ))" '
         "--threads {threads} "
         "&> {log}"
-
-
-rule set_up_align_input:
-    input:
-        fixed_refs=Path(outdir, "captus-assembly_extract.refs.json.fixed"),
-        extrs=get_align_extrs,
-        stats=get_align_stats,
-        clustering_data=get_align_clustering_data,
-        input_directory=get_extraction_outdir,
-    output:
-        temp(directory(Path(outdir, "06_align-input"))),
-    shell:
-        "ln -sf "
-        "$( readlink -f {input.input_directory} ) "
-        "$( readlink -f {output} ) ; "
-        "ln -sf "
-        "$( readlink -f {input.fixed_refs} ) "
-        "$( readlink -f {output} )/captus-assembly_extract.refs.json ; "
 
 
 rule replace_temporary_paths:
@@ -224,8 +198,8 @@ rule collect_assemblies:
 
 rule assemble:
     input:
-        r1=ancient(Path(outdir, "reads", "{sample}_R1.fastq.gz")),
-        r2=ancient(Path(outdir, "reads", "{sample}_R2.fastq.gz")),
+        r1=Path(outdir, "reads", "{sample}_R1.fastq.gz"),
+        r2=Path(outdir, "reads", "{sample}_R2.fastq.gz"),
     output:
         outdir=directory(
             Path(outdir, "02_assemblies", "{sample}", "{sample}__captus-asm")
