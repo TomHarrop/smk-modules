@@ -1,7 +1,9 @@
-import re
-import tempfile
-from snakemake.logging import logger
 from functools import cache
+from snakemake.logging import logger
+import re
+import shutil
+import tempfile
+
 
 #############
 # FUNCTIONS #
@@ -56,7 +58,7 @@ def get_extract_asms(wildcards):
         Path("05_extract-input", "{sample}__captus-asm"),
         sample=all_samples,
     )
-    return [Path(outdir, x) for x in sample_files]
+    return [ancient(Path(outdir, x)) for x in sample_files]
 
 
 def get_refs_json(wildcards):
@@ -115,7 +117,7 @@ rule target:
 
 checkpoint align:
     input:
-        Path(outdir, "06_align-input"),
+        ancient(Path(outdir, "06_align-input")),
     output:
         outdir=directory(Path(outdir, "04_alignments")),
     log:
@@ -222,8 +224,8 @@ rule collect_assemblies:
 
 rule assemble:
     input:
-        r1=Path(outdir, "reads", "{sample}_R1.fastq.gz"),
-        r2=Path(outdir, "reads", "{sample}_R2.fastq.gz"),
+        r1=ancient(Path(outdir, "reads", "{sample}_R1.fastq.gz")),
+        r2=ancient(Path(outdir, "reads", "{sample}_R2.fastq.gz")),
     output:
         outdir=directory(
             Path(outdir, "02_assemblies", "{sample}", "{sample}__captus-asm")
@@ -268,6 +270,6 @@ checkpoint collect_namelist:
     input:
         namelist,
     output:
-        temp(Path(outdir, "namelist.captus.txt")),
+        Path(outdir, "namelist.captus.txt"),
     shell:
         "(cat {input} && echo) > {output}"
