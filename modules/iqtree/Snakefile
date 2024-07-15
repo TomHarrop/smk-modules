@@ -110,7 +110,7 @@ rule iqtree:
         "--prefix tree "
         "-alrt 1000 "
         "-m MFP "
-        "-nt {threads} "
+        "-nt AUTO -ntmax {threads} "
         "-p {input.partition_file} "
         "-s {params.alignment_directory} "
         "-seed {params.seed} "
