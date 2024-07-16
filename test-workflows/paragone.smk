@@ -11,7 +11,7 @@ internal_outgroup = "80974"  # taxon id?
 paragone_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/paragone/Snakefile",
-    tag="0.2.06",
+    tag="0.2.10",
 )
 # paragone_snakefile = "../modules/paragone/Snakefile"
 

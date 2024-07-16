@@ -45,7 +45,7 @@ def get_paragone_params(wildcards, input, output):
 logger.info("Paragone smk-module")
 
 # containers
-paragone = "docker://quay.io/biocontainers/paragone:1.0.0--pl5321h031d066_0"
+paragone = "docker://quay.io/biocontainers/paragone:1.1.2--py39h9ee0642_0"
 pigz = "docker://quay.io/biocontainers/pigz:2.3.4"
 
 # catch input
@@ -242,7 +242,7 @@ rule align_selected_and_tree:
         f"{prepare_input} ; "
         "touch start_time ; "
         "paragone "
-        "align_selected_and_tree 04_alignments_trimmed_hmmcleaned "
+        "align_selected_and_tree 04_alignments_trimmed_cleaned "
         "--use_fasttree "
         "--pool " + str(pool) + " "
         "--threads {params.threads} "
@@ -276,7 +276,7 @@ rule qc_trees_and_extract_fasta:
         "qc_trees_and_extract_fasta "
         "--treeshrink_q_value 0.20 "
         "--cut_deep_paralogs_internal_branch_length_cutoff 0.04 "
-        "04_alignments_trimmed_hmmcleaned "
+        "04_alignments_trimmed_cleaned "
         "&> {log} ; "
         f"{catch_output}"
 
@@ -301,7 +301,7 @@ rule alignment_to_tree:
     shell:
         f"{prepare_input} ; "
         "paragone "
-        "alignment_to_tree 04_alignments_trimmed_hmmcleaned "
+        "alignment_to_tree 04_alignments_trimmed_cleaned "
         "--use_fasttree "
         "--pool " + str(pool) + " "
         "--threads {params.threads} "
