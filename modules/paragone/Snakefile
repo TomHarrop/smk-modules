@@ -10,7 +10,7 @@ from snakemake.logging import logger
 
 
 def get_paragone_input(wildcards):
-    input_dict = {"paralog_sequences": paralog_sequences}
+    input_dict = {}
     try:
         input_dict["external_outgroups"] = external_outgroups
     except NameError:
@@ -45,12 +45,14 @@ def get_paragone_params(wildcards, input, output):
 logger.info("Paragone smk-module")
 
 # containers
-paragone = "docker://quay.io/biocontainers/paragone:1.1.2--py39h9ee0642_0"
+biopython = "docker://quay.io/biocontainers/biopython:1.81"
+paragone = "docker://quay.io/biocontainers/paragone:1.1.3--py39h9ee0642_0"
 pigz = "docker://quay.io/biocontainers/pigz:2.3.4"
 
 # catch input
 paralog_sequences = config["paralog_sequences"]
 logger.debug(f"paralog_sequences {paralog_sequences}")
+
 
 try:
     external_outgroups = config["external_outgroups"]
@@ -121,6 +123,7 @@ rule collect_paragone_intermediate_files:
             Path(paragone_directory, "check_and_align.tar"),
             Path(paragone_directory, "prune_paralogs.tar"),
             Path(paragone_directory, "qc_trees_and_extract_fasta.tar"),
+            Path(paragone_directory, "oriented_sequences.tar"),
         ],
         # this goes last because it's got the logs and reports
         final_alignments=Path(paragone_directory, "final_alignments.tar"),
@@ -186,6 +189,7 @@ rule final_alignments:
     shell:
         f"{prepare_input} ; "
         "paragone final_alignments "
+        "--use_clustal "
         "--mo --rt --mi "
         "--pool " + str(pool) + " "
         "--threads {params.threads} "
@@ -244,6 +248,7 @@ rule align_selected_and_tree:
         "paragone "
         "align_selected_and_tree 04_alignments_trimmed_cleaned "
         "--use_fasttree "
+        "--use_clustal "
         "--pool " + str(pool) + " "
         "--threads {params.threads} "
         "&> {log} ; "
@@ -312,6 +317,7 @@ rule alignment_to_tree:
 rule check_and_align:
     input:
         unpack(get_paragone_input),
+        tarfiles=[Path(paragone_directory, "oriented_sequences.tar")],
     output:
         tarfile=temp(Path(paragone_directory, "check_and_align.tar")),
     params:
@@ -328,12 +334,28 @@ rule check_and_align:
     container:
         paragone
     shell:
+        "for tarfile in {input.tarfiles} ; "
+        'do tar -xf "${{tarfile}}" ; done ; '
         "mkdir {rule} ; touch start_time ; "
         "paragone "
-        "check_and_align {input.paralog_sequences} "
+        "check_and_align . "
+        "--use_clustal "
         "{params[0][external_outgroups]} "
         "{params[0][internal_outgroup]} "
         "--pool " + str(pool) + " "
         "--threads {params.threads} "
         "&> {log} ; "
         f"{catch_output}"
+
+
+rule orient_sequences:
+    input:
+        Path(paralog_sequences),
+    output:
+        temp(Path(paragone_directory, "oriented_sequences.tar")),
+    log:
+        Path(logdir, "orient_sequences.log"),
+    container:
+        biopython
+    script:
+        "scripts/orient_sequences.py"
