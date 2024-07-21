@@ -101,12 +101,14 @@ rule target:
     input:
         get_align_output_files,
         get_align_stats,
-        Path(outdir, "captus-assembly_extract.refs.json.fixed"),
+        ancient(Path(outdir, "captus-assembly_extract.refs.json.fixed")),
 
 
 checkpoint align:
     input:
-        fixed_refs=Path(outdir, "captus-assembly_extract.refs.json.fixed"),
+        fixed_refs=ancient(
+            Path(outdir, "captus-assembly_extract.refs.json.fixed")
+        ),
         input_directory=Path(outdir, "03_extractions"),
     output:
         outdir=directory(Path(outdir, "04_alignments")),
