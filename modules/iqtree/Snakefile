@@ -3,52 +3,17 @@ from snakemake.logging import logger
 from functools import cache
 
 
-#############
-# FUNCTIONS #
-#############
-
-
-def get_checkpoint(wildcards):
-    return checkpoints.generate_nexus_partition_file.get(**wildcards)
-
-
-def get_alignment_directory(wildcards):
-    pathfile = get_checkpoint(wildcards).output["pathfile"]
-    with open(pathfile, "rt") as f:
-        alignment_directory = f.read()
-    return alignment_directory
-
-
-def get_excluded_samples(wildcards):
-    reportfile = get_checkpoint(wildcards).output["report"]
-    with open(reportfile, "rt") as f:
-        excluded_samples = f.read().splitlines()
-    return excluded_samples
-
-
-def get_alignments(wildcards):
-    alignment_directory = get_alignment_directory(wildcards)
-    excluded_samples = get_excluded_samples(wildcards)
-    myfiles = list(
-        y
-        for y in Path(alignment_directory).glob("*")
-        if not (y.name.startswith(".") or y.as_posix() in excluded_samples)
-    )
-    return myfiles
-
-
 ###########
 # GLOBALS #
 ###########
 
 # containers
 iqtree = "docker://quay.io/biocontainers/iqtree:2.3.5--hdcf5f25_0"
-python = "docker://python:3.10.14"
 biopython = "docker://quay.io/biocontainers/biopython:1.81"
 
 # set up directories
 outdir = Path(config["outdir"] if "outdir" in config else ".")
-logger.debug(f"outdir: {outdir}")
+logger.warning(f"outdir: {outdir}")
 logdir = Path(outdir, "logs")
 
 
@@ -59,22 +24,24 @@ logger.debug(f"Caught alignment_directory: {alignment_directory}")
 
 rule target:
     input:
+        Path(outdir, "iqtree_files.tar"),
         multiext(
             Path(
                 outdir,
                 "tree",
             ).as_posix(),
-            ".best_scheme.nex",
             ".iqtree",
             ".log",
-            ".mldist",
             ".treefile",
         ),
 
 
 rule iqtree:
     input:
-        alignments=get_alignments,
+        alignments=Path(
+            outdir,
+            "inputs.tar",
+        ),
         partition_file=Path(
             outdir,
             "partitions.nexus",
@@ -85,17 +52,13 @@ rule iqtree:
                 outdir,
                 "tree",
             ).as_posix(),
-            ".best_scheme.nex",
             ".iqtree",
             ".log",
-            ".mldist",
             ".treefile",
         ),
-    shadow:
-        "minimal"
+        tarfile=Path(outdir, "iqtree_files.tar"),
     params:
         seed=14,
-        alignment_directory=f"{alignment_directory}",
         outdir=f"{outdir}",
     log:
         Path(logdir, "iqtree.log"),
@@ -103,23 +66,30 @@ rule iqtree:
         mem_mb=lambda wildcards, attempt: int(32e3 * attempt),
         time="7-00",
     threads: lambda wildcards, attempt: 48 * attempt
+    shadow:
+        "minimal"
     container:
         iqtree
     shell:
+        "mkdir input_alignments ; "
+        "tar -xf {input.alignments} -C input_alignments/ ; "
         "iqtree "
         "--prefix tree "
         "-alrt 1000 "
         "-m MFP "
         "-nt AUTO -ntmax {threads} "
         "-p {input.partition_file} "
-        "-s {params.alignment_directory} "
+        "-s input_alignments "
         "-seed {params.seed} "
         "-wbtl "
-        "&> {log} "
-        "&& mv tree.* {params.outdir}/"
+        "&> {log} ; "
+        "mkdir iqtree_files ; "
+        "cp tree.* iqtree_files/ ; "
+        "tar -cf {output.tarfile} --directory iqtree_files . ; "
+        "mv tree.* {params.outdir}/"
 
-# make this a rule and find the output using a param function
-checkpoint generate_nexus_partition_file:
+
+rule generate_nexus_partition_file:
     input:
         alignment_directory=f"{alignment_directory}",
     output:
@@ -127,18 +97,16 @@ checkpoint generate_nexus_partition_file:
             outdir,
             "partitions.nexus",
         ),
-        report=Path(
+        excluded_samples=Path(
             outdir,
             "excluded_samples.txt",
         ),
-        pathfile=temp(
+        kept_alignments=temp(
             Path(
                 outdir,
-                "pathfile",
+                "inputs.tar",
             )
         ),
-    params:
-        alignment_directory=f"{alignment_directory}",
     log:
         Path(
             logdir,
@@ -148,6 +116,8 @@ checkpoint generate_nexus_partition_file:
         mem_mb=int(4e3),
         time=lambda wildcards, attempt: 20 * attempt,
     threads: 1
+    shadow:
+        "minimal"
     container:
         biopython
     script:

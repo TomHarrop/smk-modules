@@ -3,28 +3,30 @@
 from Bio import SeqIO
 from pathlib import Path
 import os
-import sys
+import tarfile
 
 
 def count_fasta_records(fasta_file):
     return len(SeqIO.index(fasta_file, "fasta"))
 
 
-def create_nexus_partition(directory, outfile, reportfile):
+def create_nexus_partition(directory, nexus_file, output_tarfile, excluded_samples):
     partition_content = []
     file_list = sorted(os.listdir(directory))
 
-    with open(reportfile, "a") as f:
-        for filename in file_list:
-            if not filename.startswith("."):
-                alignment_name = os.path.splitext(filename)[0]
-                filepath = os.path.join(directory, filename)
-                if count_fasta_records(filepath) < 3:
-                    f.write(f"{filepath}\n")
-                else:
-                    partition_content.append(
-                        f"charset {alignment_name} = {filepath}: *;"
-                    )
+    with tarfile.open(output_tarfile, "w") as tar:
+        with open(excluded_samples, "a") as f_excluded:
+            for filename in file_list:
+                if not filename.startswith("."):
+                    alignment_name = os.path.splitext(filename)[0]
+                    filepath = os.path.join(directory, filename)
+                    if count_fasta_records(filepath) < 3:
+                        f_excluded.write(f"{filename}\n")
+                    else:
+                        partition_content.append(
+                            f"charset {alignment_name} = input_alignments/{filename}: *;"
+                        )
+                        tar.add(filepath, arcname=filename)
 
     nexus_content = "#NEXUS\n\nbegin sets;\n"
 
@@ -33,14 +35,13 @@ def create_nexus_partition(directory, outfile, reportfile):
 
     nexus_content += "end;"
 
-    with open(outfile, "wt") as f:
+    with open(nexus_file, "wt") as f:
         print(nexus_content, file=f)
 
 
 if __name__ == "__main__":
-    directory_path = Path(snakemake.params["alignment_directory"])
-    outfile = snakemake.output["nexus"]
-    reportfile = snakemake.output["report"]
-    create_nexus_partition(directory_path, outfile, reportfile)
-    with open(snakemake.output["pathfile"], "wt") as f:
-        f.write(directory_path.as_posix())
+    directory_path = Path(snakemake.input["alignment_directory"])
+    output_tarfile = snakemake.output["kept_alignments"]
+    nexus_file = snakemake.output["nexus"]
+    excluded_samples = snakemake.output["excluded_samples"]
+    create_nexus_partition(directory_path, nexus_file, output_tarfile, excluded_samples)
