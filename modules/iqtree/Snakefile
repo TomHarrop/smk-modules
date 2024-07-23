@@ -118,7 +118,7 @@ rule iqtree:
         "&> {log} "
         "&& mv tree.* {params.outdir}/"
 
-
+# make this a rule and find the output using a param function
 checkpoint generate_nexus_partition_file:
     input:
         alignment_directory=f"{alignment_directory}",
