@@ -43,12 +43,12 @@ all_samples = sorted(
     set(x.stem.split(".")[0] for x in read_directory.glob("*r1.fastq.gz"))
 )
 
-captus_snakefile = "../modules/captus/Snakefile"
-# captus_snakefile = github(
-#     "tomharrop/smk-modules",
-#     path="modules/captus/Snakefile",
-#     tag="0.2.12",
-# )
+# captus_snakefile = "../modules/captus/Snakefile"
+captus_snakefile = github(
+    "tomharrop/smk-modules",
+    path="modules/captus/Snakefile",
+    tag="0.2.13",
+)
 
 
 captus_alignments = ["01_AA", "02_NT", "03_genes"]
@@ -79,8 +79,12 @@ rule post_captus:
         "cp -r {params.alignment_dir} {output}"
 
 
-# note. this does NOT work well with `prefix:` because of the way captus parses
+# NOTE. this does NOT work well with `prefix:` because of the way captus parses
 # directory arguments. better to use the outdir where possible.
+# Another NOTE. It's very hard to make this work without a checkpoint. If you
+# pass the samples as a list, you have to define the module once for each list.
+# If you pass the samples in a namelist, you can't start the workflow until
+# you've read the list.
 module captus:
     snakefile:
         captus_snakefile
