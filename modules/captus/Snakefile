@@ -11,26 +11,11 @@ import tempfile
 
 
 def find_cluster_file(wildcards):
-    extraction_dir = get_extraction_outdir(wildcards)
+    extraction_dir = rules.extract.output["outdir"]
     return [
         Path(x).resolve()
         for x in Path(extraction_dir).rglob("*_captus_cluster_refs.fasta")
-    ][0]
-
-
-def get_align_output_files(wildcards):
-    align_outdir = checkpoints.align.get(**wildcards).output["outdir"]
-    return [x for x in Path(align_outdir).glob("**")]
-
-
-def get_align_stats(wildcards):
-    extraction_dir = get_extraction_outdir(wildcards)
-    return multiext(
-        Path(extraction_dir, "captus-assembly_extract").as_posix(),
-        ".log",
-        ".report.html",
-        ".stats.tsv",
-    )
+    ]
 
 
 def get_extract_asms(wildcards):
@@ -42,17 +27,8 @@ def get_extract_asms(wildcards):
     return [Path(outdir, x) for x in sample_files]
 
 
-def get_extraction_outdir(wildcards):
-    return checkpoints.extract.get(**wildcards).output["outdir"]
-
-
-def get_refs_json(wildcards):
-    extraction_dir = get_extraction_outdir(wildcards)
-    return Path(extraction_dir, "captus-assembly_extract.refs.json.tmp")
-
-
 def get_sample_list(wildcards):
-    namelist_file = checkpoints.collect_namelist.get(**wildcards).output[0]
+    namelist_file = namelist
     return read_namelist(namelist_file)
 
 
@@ -99,16 +75,13 @@ translated_targets = target_file.with_suffix(".captus.faa")
 
 rule target:
     input:
-        get_align_output_files,
-        get_align_stats,
-        ancient(Path(outdir, "captus-assembly_extract.refs.json.fixed")),
+        Path(outdir, "04_alignments"),
+        Path(outdir, "captus-assembly_extract.refs.json.fixed"),
 
 
-checkpoint align:
+rule align:
     input:
-        fixed_refs=ancient(
-            Path(outdir, "captus-assembly_extract.refs.json.fixed")
-        ),
+        fixed_refs=Path(outdir, "captus-assembly_extract.refs.json.fixed"),
         input_directory=Path(outdir, "03_extractions"),
     output:
         outdir=directory(Path(outdir, "04_alignments")),
@@ -137,25 +110,24 @@ checkpoint align:
 
 rule replace_temporary_paths:
     input:
-        get_refs_json,
+        Path(outdir, "captus-assembly_extract.refs.json"),
     output:
         Path(outdir, "captus-assembly_extract.refs.json.fixed"),
     params:
-        correct_path=lambda wildcards: find_cluster_file(wildcards),
+        correct_path=find_cluster_file,
     container:
         python
     script:
         "scripts/replace_temporary_paths.py"
 
 
-checkpoint extract:
+rule extract:
     input:
         asms=get_extract_asms,
         target_file=target_file,
     output:
         outdir=directory(Path(outdir, "03_extractions")),
-    shadow:
-        "minimal"
+        refs_json=Path(outdir, "captus-assembly_extract.refs.json"),
     params:
         asms=lambda wildcards, input: Path(input.asms[0]).parent,
     log:
@@ -166,6 +138,8 @@ checkpoint extract:
     resources:
         time=lambda wildcards, attempt: 120 * attempt,
         mem_mb=lambda wildcards, attempt: int(16e3 * attempt),
+    shadow:
+        "minimal"
     container:
         captus
     shell:
@@ -180,7 +154,7 @@ checkpoint extract:
         "--threads {threads} "
         "&> {log} "
         "; mv {output.outdir}/captus-assembly_extract.refs.json "
-        "{output.outdir}/captus-assembly_extract.refs.json.tmp"
+        "{output.refs_json}"
 
 
 rule collect_assemblies:
@@ -242,7 +216,7 @@ rule collect_reads:
 
 
 # this is to make sure the namelist ends with a newline
-checkpoint collect_namelist:
+rule collect_namelist:
     input:
         namelist,
     output:

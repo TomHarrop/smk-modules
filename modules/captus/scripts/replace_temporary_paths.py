@@ -20,7 +20,7 @@ def replace_keys(data, keys_to_replace, new_value):
 def main():
     tmp_json_path = snakemake.input[0]
     fixed_json_path = snakemake.output[0]
-    cluster_path = snakemake.params["correct_path"]
+    cluster_path = snakemake.params["correct_path"][0]
 
     keys_to_replace = ["NT_path", "NT_msg"]
     full_cluster_path = Path(cluster_path).resolve().as_posix()
