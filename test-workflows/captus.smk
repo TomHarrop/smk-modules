@@ -5,47 +5,6 @@ import pandas as pd
 import tempfile
 
 
-def get_captus_output(wildcards):
-    align_outdir = rules.captus_align.output["outdir"]
-    return [
-        Path(
-            output_directory,
-            "04_alignments",
-            "02_untrimmed",
-            "06_informed",
-            "03_coding_MIT",
-        ),
-        Path(
-            output_directory,
-            "04_alignments",
-            "03_trimmed",
-            "06_informed",
-            "01_coding_NUC",
-        ),
-    ]
-
-
-sample_data = Path("test-data", "hybpiper", "samples.csv")
-target_file = Path("test-data", "hybpiper", "combined_targetfiles.fixed.fasta")
-read_directory = Path("test-data", "captus", "reads")
-output_directory = Path(
-    "test-output",
-    "captus",
-)
-
-# just run on whatever read files we have
-all_samples = sorted(
-    set(x.stem.split(".")[0] for x in read_directory.glob("*r1.fastq.gz"))
-)
-
-captus_snakefile = "../modules/captus/Snakefile"
-# captus_snakefile = github(
-#     "tomharrop/smk-modules",
-#     path="modules/captus/Snakefile",
-#     tag="0.2.12",
-# )
-
-
 # demonstrate how to use a param to find the input directory for e.g. iqtree
 def get_alignment_dir(wildcards):
     captus_align_outdir = rules.captus_align.output["outdir"]
@@ -69,6 +28,27 @@ def get_alignment_dir(wildcards):
         if path.match(Path("**", untrimpath).as_posix()) and path.is_dir():
             return path
     return ""
+
+
+sample_data = Path("test-data", "hybpiper", "samples.csv")
+target_file = Path("test-data", "hybpiper", "combined_targetfiles.fixed.fasta")
+read_directory = Path("test-data", "captus", "reads")
+output_directory = Path(
+    "test-output",
+    "captus",
+)
+
+# just run on whatever read files we have
+all_samples = sorted(
+    set(x.stem.split(".")[0] for x in read_directory.glob("*r1.fastq.gz"))
+)
+
+captus_snakefile = "../modules/captus/Snakefile"
+# captus_snakefile = github(
+#     "tomharrop/smk-modules",
+#     path="modules/captus/Snakefile",
+#     tag="0.2.12",
+# )
 
 
 captus_alignments = ["01_AA", "02_NT", "03_genes"]

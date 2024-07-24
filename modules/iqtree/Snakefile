@@ -13,7 +13,7 @@ biopython = "docker://quay.io/biocontainers/biopython:1.81"
 
 # set up directories
 outdir = Path(config["outdir"] if "outdir" in config else ".")
-logger.warning(f"outdir: {outdir}")
+logger.debug(f"outdir: {outdir}")
 logdir = Path(outdir, "logs")
 
 

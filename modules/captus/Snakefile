@@ -28,7 +28,7 @@ def get_extract_asms(wildcards):
 
 
 def get_sample_list(wildcards):
-    namelist_file = namelist
+    namelist_file = checkpoints.collect_namelist.get(**wildcards).output[0]
     return read_namelist(namelist_file)
 
 
@@ -215,8 +215,9 @@ rule collect_reads:
         '"$( readlink -f {output} )" '
 
 
-# this is to make sure the namelist ends with a newline
-rule collect_namelist:
+# This HAS to be a checkpoint. We need to read this file to know which samples
+# we have.
+checkpoint collect_namelist:
     input:
         namelist,
     output:
