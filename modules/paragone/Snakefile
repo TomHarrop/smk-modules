@@ -355,6 +355,7 @@ rule orient_sequences:
         temp(Path(paragone_directory, "oriented_sequences.tar")),
     log:
         Path(logdir, "orient_sequences.log"),
+    threads: workflow.cores
     container:
         biopython
     script:

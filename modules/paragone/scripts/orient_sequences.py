@@ -2,12 +2,11 @@
 
 from Bio import SeqIO
 from Bio.Align import PairwiseAligner
-from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
+from multiprocessing import Pool
 from pathlib import Path
 from snakemake.logging import logger
 import logging
-import os
 import tarfile
 import tempfile
 
@@ -29,6 +28,14 @@ def best_orientation(seq1, seq2):
             best_orientation = oriented_seq
             best_name = name
     return best_orientation, best_name
+
+
+def process_fasta(input_fasta):
+    logger.info(f"Processing FASTA file {input_fasta}")
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".fasta") as tmp_output_fasta:
+        logger.info(f"Writing output for {input_fasta} to {tmp_output_fasta.name}")
+        reorient_sequences(input_fasta, tmp_output_fasta.name)
+        return tmp_output_fasta.name, input_fasta.name
 
 
 def reorient_sequences(input_fasta, output_fasta):
@@ -55,7 +62,7 @@ def main():
     file_handler = logging.FileHandler(snakemake.log[0])
     logger.logfile_handler = file_handler
     logger.logger.addHandler(logger.logfile_handler)
-    
+
     input_directory = snakemake.input[0]
     output_tarfile = snakemake.output[0]
 
@@ -67,14 +74,13 @@ def main():
         if not file.name.startswith(".")
     ]
 
+    with Pool(processes=snakemake.threads) as pool:
+        results = pool.map(process_fasta, fasta_files)
+
     with tarfile.open(output_tarfile, "w") as tar:
-        for input_fasta in fasta_files:
-            logger.info(f"Opening fasta file {input_fasta}")
-            with tempfile.NamedTemporaryFile(
-                delete=False, suffix=".fasta"
-            ) as tmp_output_fasta:
-                reorient_sequences(input_fasta, tmp_output_fasta.name)
-                tar.add(tmp_output_fasta.name, arcname=input_fasta.name)
+        for tmp_output_fasta, original_name in results:
+            arcname = original_name
+            tar.add(tmp_output_fasta, arcname=original_name)
 
 
 if __name__ == "__main__":
