@@ -148,6 +148,7 @@ rule extract:
         "--out {output.outdir}/. "
         "--nuc_refs {input.target_file} "
         "--mit_refs SeedPlantsMIT "
+        "--ptd_refs SeedPlantsPTD "
         "--cluster_leftovers "
         "--mmseqs_method easy-cluster "
         '--ram "$(( {resources.mem_mb}/1000 ))" '
