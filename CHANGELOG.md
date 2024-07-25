@@ -1,7 +1,7 @@
 # Changelog
 
 
-## (unreleased)
+## 0.3.01 (2024-07-25)
 
 ### New
 
