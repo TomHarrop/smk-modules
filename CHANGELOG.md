@@ -1,6 +1,13 @@
 # Changelog
 
 
+## (unreleased)
+
+### New
+
+* Recover plastid markers with Captus. [Thomas Harrop]
+
+
 ## 0.2.18 (2024-07-25)
 
 ### Other
