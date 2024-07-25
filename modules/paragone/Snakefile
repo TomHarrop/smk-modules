@@ -9,6 +9,13 @@ from snakemake.logging import logger
 #############
 
 
+def get_orient_threads(wildcards, input):
+    nfiles = sum(
+        1 for x in Path(input[0]).glob("*.fasta") if not x.name.startswith(".")
+    )
+    return min(workflow.cores, nfiles)
+
+
 def get_paragone_input(wildcards):
     input_dict = {}
     try:
@@ -352,10 +359,11 @@ rule orient_sequences:
     input:
         Path(paralog_sequences),
     output:
-        temp(Path(paragone_directory, "oriented_sequences.tar")),
+        tarfile=temp(Path(paragone_directory, "oriented_sequences.tar")),
+        csv=Path(outdir, "sequence_orientations.csv"),
     log:
         Path(logdir, "orient_sequences.log"),
-    threads: workflow.cores
+    threads: get_orient_threads
     container:
         biopython
     script:
