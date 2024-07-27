@@ -6,13 +6,11 @@
 
 * Changelog.
 
-
 ## 0.3.01 (2024-07-25)
 
 ### New
 
 * Recover plastid markers with Captus.
-
 
 ## 0.2.18 (2024-07-25)
 
@@ -20,13 +18,11 @@
 
 * Log what happened during orientation.
 
-
 ## 0.2.17 (2024-07-24)
 
 ### Other
 
 * Multiprocess fasta files.
-
 
 ## 0.2.13 (2024-07-24)
 
@@ -42,13 +38,11 @@
 
 * Initial commit.
 
-
 ## 0.2.12 (2024-07-21)
 
 ### Other
 
 * Mark tempfile as ancient.
-
 
 ## 0.2.11 (2024-07-19)
 
@@ -56,13 +50,11 @@
 
 * Switch paragone to clustalo.
 
-
 ## 0.2.10 (2024-07-16)
 
 ### Other
 
 * Paragone version bump.
-
 
 ## 0.2.09 (2024-07-15)
 
@@ -70,13 +62,11 @@
 
 * Update iqtree nt flag.
 
-
 ## 0.2.08 (2024-07-14)
 
 ### Other
 
 * Avoid temporary input directory.
-
 
 ## 0.2.07 (2024-07-14)
 
@@ -86,7 +76,6 @@
 
 * Debug.
 
-
 ## 0.2.06 (2024-07-12)
 
 ### Other
@@ -95,13 +84,11 @@
 
 * Petrichor is making recursive symlinks.
 
-
 ## 0.2.05 (2024-07-10)
 
 ### Other
 
 * Handle archives.
-
 
 ## 0.2.04 (2024-07-10)
 
@@ -110,7 +97,6 @@
 * Revert captus changes.
 
 * Workaround lack of tmpdir for hybpiper tar.
-
 
 ## 0.2.03 (2024-07-09)
 
@@ -122,13 +108,11 @@
 
   Expand captus wildcards
 
-
 ## 0.2.02 (2024-07-09)
 
 ### Other
 
 * Expand workaround.
-
 
 ## 0.2.01 (2024-07-09)
 
@@ -137,7 +121,6 @@
 * Workaround for expand???
 
 * Update test workflows.
-
 
 ## 0.2.0 (2024-07-09)
 
@@ -191,7 +174,6 @@
 
 * Attempt to fix tmp issues in modules.
 
-
 ## 0.1.07 (2024-07-04)
 
 ### Other
@@ -200,13 +182,11 @@
 
 * Update iqtree container.
 
-
 ## 0.1.06 (2024-06-28)
 
 ### Other
 
 * Update captus target.
-
 
 ## 0.1.05 (2024-06-27)
 
@@ -216,13 +196,11 @@
 
 * Merge remote-tracking branch 'origin'
 
-
 ## 0.1.03 (2024-06-27)
 
 ### Other
 
 * Update captus target.
-
 
 ## 0.1.04 (2024-06-25)
 
@@ -232,7 +210,6 @@
 
 * Use a shadow directory for fasterq-dump.
 
-
 ## 0.1.02 (2024-06-20)
 
 ### Other
@@ -241,13 +218,11 @@
 
 * Iqtree.
 
-
 ## 0.1.01 (2024-06-20)
 
 ### Other
 
 * Something wrong with wildcards.
-
 
 ## 0.1.00 (2024-06-19)
 
@@ -259,13 +234,11 @@
 
 * Use checkpoints to resolve alignments.
 
-
 ## 0.0.59 (2024-06-19)
 
 ### Other
 
 * Format params in iqtree.
-
 
 ## 0.0.58 (2024-06-13)
 
@@ -273,13 +246,11 @@
 
 * Make directory an input.
 
-
 ## 0.0.57 (2024-06-13)
 
 ### Other
 
 * Use wildcards in iqtree.
-
 
 ## 0.0.56 (2024-06-13)
 
@@ -287,13 +258,11 @@
 
 * Add iqtree.
 
-
 ## 0.0.55 (2024-04-19)
 
 ### Other
 
 * Catch extract stats.
-
 
 ## 0.0.54 (2024-04-12)
 
@@ -301,20 +270,17 @@
 
 * Mark captus directories temp.
 
-
 ## 0.0.53 (2024-04-12)
 
 ### Other
 
 * Catch more captus output.
 
-
 ## 0.0.52 (2024-04-05)
 
 ### Other
 
 * Captus typo:
-
 
 ## 0.0.51 (2024-04-05)
 
@@ -324,13 +290,11 @@
 
 * Assemble works but extract fails.
 
-
 ## 0.0.50 (2024-03-28)
 
 ### Other
 
 * Shadow for purge.
-
 
 ## 0.0.49 (2024-03-27)
 
@@ -338,13 +302,11 @@
 
 * Use shadow directories to avoid CD.
 
-
 ## 0.0.48 (2024-03-21)
 
 ### Other
 
 * Constrict sample names.
-
 
 ## 0.0.47 (2024-03-15)
 
@@ -354,20 +316,17 @@
 
 * Basic purge haplotigs function.
 
-
 ## 0.0.46 (2024-03-08)
 
 ### Other
 
 * Rm typo.
 
-
 ## 0.0.45 (2024-03-08)
 
 ### Other
 
 * Clean up RM.
-
 
 ## 0.0.44 (2024-03-01)
 
@@ -379,13 +338,11 @@
 
 * Use read_usage_target to extract the reads used in assembly.
 
-
 ## 0.0.43 (2024-02-29)
 
 ### Other
 
 * Hybpiper now reads samples from a namelist.
-
 
 ## 0.0.42 (2024-02-23)
 
@@ -399,13 +356,11 @@
 
 * Cache csv files in bpdownload.
 
-
 ## 0.0.41 (2024-02-07)
 
 ### Other
 
 * Braker3 pick up gtf and gff.
-
 
 ## 0.0.40 (2024-02-01)
 
@@ -413,13 +368,11 @@
 
 * Add header length parameter.
 
-
 ## 0.0.39 (2024-02-01)
 
 ### Other
 
 * Tag.
-
 
 ## 0.0.38 (2024-02-01)
 
@@ -428,7 +381,6 @@
 * Split bamfiles.
 
 * Fa readme.
-
 
 ## 0.0.37 (2024-02-01)
 
@@ -439,7 +391,6 @@
 * Add optional parameters.
 
 * Update readme.
-
 
 ## 0.0.36 (2024-01-31)
 
@@ -457,7 +408,6 @@
 
 * Move build script to container recipe repo.
 
-
 ## 0.0.35 (2024-01-24)
 
 ### Other
@@ -465,7 +415,6 @@
 * Braker version bump.
 
 * Wrong path.
-
 
 ## 0.0.34 (2024-01-19)
 
@@ -503,13 +452,11 @@
 
 * Work out db extraction / download.
 
-
 ## 0.0.33 (2024-01-11)
 
 ### Other
 
 * Turn off strandedness.
-
 
 ## 0.0.32 (2024-01-11)
 
@@ -517,13 +464,11 @@
 
 * Hisat2.
 
-
 ## 0.0.31 (2023-12-29)
 
 ### Other
 
 * Wrong flag in samtools.
-
 
 ## 0.0.30 (2023-12-27)
 
@@ -531,20 +476,17 @@
 
 * Write index to outdir.
 
-
 ## 0.0.29 (2023-12-21)
 
 ### Other
 
 * Relax sample names.
 
-
 ## 0.0.28 (2023-12-21)
 
 ### Other
 
 * Allow running without annothation.
-
 
 ## 0.0.27 (2023-12-21)
 
@@ -558,20 +500,17 @@
 
 * Forgot container.
 
-
 ## 0.0.26 (2023-12-14)
 
 ### Other
 
 * Forgot container.
 
-
 ## 0.0.25 (2023-12-14)
 
 ### Other
 
 * No need to combine samples in bbmap.
-
 
 ## 0.0.24 (2023-12-14)
 
@@ -581,13 +520,11 @@
 
 * Star pipeline.
 
-
 ## 0.0.23 (2023-12-12)
 
 ### Other
 
 * Check the bamfile before running braker3.
-
 
 ## 0.0.22 (2023-12-01)
 
@@ -595,13 +532,11 @@
 
 * Biocontainer.
 
-
 ## 0.0.21 (2023-12-01)
 
 ### Other
 
 * Add resources for paragone.
-
 
 ## 0.0.20 (2023-11-30)
 
@@ -625,13 +560,11 @@
 
 * Initial paragone step.
 
-
 ## 0.0.19 (2023-11-30)
 
 ### Other
 
 * Exponent time for repair.
-
 
 ## 0.0.18 (2023-10-27)
 
@@ -647,13 +580,11 @@
 
 * Initial download working from accession alone.
 
-
 ## 0.0.17 (2023-09-28)
 
 ### Other
 
 * Be stricter on targetfiles.
-
 
 ## 0.0.16 (2023-09-28)
 
@@ -661,13 +592,11 @@
 
 * Collect targetfile in hybpiper.
 
-
 ## 0.0.15 (2023-09-27)
 
 ### Other
 
 * Less ram usage for HP.
-
 
 ## 0.0.14 (2023-09-21)
 
@@ -675,13 +604,11 @@
 
 * Deal with whitespace in proteins and genome.
 
-
 ## 0.0.13 (2023-09-21)
 
 ### Other
 
 * Don't try to reformat proteins.
-
 
 ## 0.0.12 (2023-09-21)
 
@@ -689,13 +616,11 @@
 
 * Simplify output.
 
-
 ## 0.0.11 (2023-09-21)
 
 ### Other
 
 * Wrong arg.
-
 
 ## 0.0.10 (2023-09-21)
 
@@ -703,13 +628,11 @@
 
 * Wrong arg.
 
-
 ## 0.0.9 (2023-09-21)
 
 ### Other
 
 * Logger.
-
 
 ## 0.0.8 (2023-09-21)
 
@@ -718,7 +641,6 @@
 * Make braker evidence optional.
 
 * Specify braker output.
-
 
 ## 0.0.7 (2023-09-19)
 
@@ -734,7 +656,6 @@
 
 * Add braker.
 
-
 ## 0.0.6 (2023-09-18)
 
 ### Other
@@ -742,7 +663,6 @@
 * Remote module.
 
 * Repeatmaskter.
-
 
 ## 0.0.5 (2023-09-14)
 
@@ -752,13 +672,11 @@
 
 * Add paralogs.
 
-
 ## 0.0.4 (2023-09-14)
 
 ### Other
 
 * Don't search for files, name them appropriately.
-
 
 ## 0.0.3 (2023-09-14)
 
@@ -770,7 +688,6 @@
 
 * Handle missing files.
 
-
 ## 0.0.2 (2023-09-13)
 
 ### Other
@@ -780,7 +697,6 @@
 * Check steps.
 
 * Add check targetfile.
-
 
 ## 0.0.1 (2023-09-13)
 
@@ -795,5 +711,3 @@
 * Initial commit.
 
 * Initial commit.
-
-
