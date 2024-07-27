@@ -43,12 +43,12 @@ all_samples = sorted(
     set(x.stem.split(".")[0] for x in read_directory.glob("*r1.fastq.gz"))
 )
 
-captus_snakefile = "../modules/captus/Snakefile"
-# captus_snakefile = github(
-#     "tomharrop/smk-modules",
-#     path="modules/captus/Snakefile",
-#     tag="0.3.01",
-# )
+# captus_snakefile = "../modules/captus/Snakefile"
+captus_snakefile = github(
+    "tomharrop/smk-modules",
+    path="modules/captus/Snakefile",
+    tag="0.3.01",
+)
 
 
 captus_alignments = ["01_AA", "02_NT", "03_genes"]
