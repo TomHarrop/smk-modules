@@ -47,7 +47,7 @@ all_samples = sorted(
 captus_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/captus/Snakefile",
-    tag="0.3.01",
+    tag="0.3.02",
 )
 
 

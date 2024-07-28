@@ -1,8 +1,16 @@
 # Changelog
 
-## (unreleased)
+## 0.3.02 (2024-07-27)
+
+### Fix
+
+* Find cluster file inside temporary path script.
+
+* Find cluster file inside temporary path script.
 
 ### Other
+
+* Update changelog.
 
 * Changelog.
 
