@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.03 (2024-08-05)
+
+### Fix
+
+* Check for empty files in orient_sequences.
+
+### Other
+
+* Changelog.
+
 ## 0.3.02 (2024-07-27)
 
 ### Fix
