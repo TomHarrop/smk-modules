@@ -32,33 +32,39 @@ def best_orientation(seq1, seq2):
 
 def process_fasta(input_fasta):
     logger.info(f"Processing FASTA file {input_fasta}")
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".fasta") as tmp_output_fasta:
-        logger.info(f"Writing output for {input_fasta} to {tmp_output_fasta.name}")
-        best_orientations = reorient_sequences(input_fasta, tmp_output_fasta.name)
-        return tmp_output_fasta.name, input_fasta.name, best_orientations
+    tmp_output_fasta = tempfile.NamedTemporaryFile(delete=False, suffix=".fasta")
+    logger.info(f"Writing output for {input_fasta} to {tmp_output_fasta.name}")
+    best_orientations = reorient_sequences(input_fasta, tmp_output_fasta.name)
+    return tmp_output_fasta.name, input_fasta.name, best_orientations
 
 
 def reorient_sequences(input_fasta, output_fasta):
-    input_handle = open(input_fasta, "r")
-    output_handle = open(output_fasta, "w")
-    sequences = SeqIO.parse(input_handle, "fasta")
-    # record the orientations
     best_orientations = {}
-    # Get the first sequence as ref and write it to the output. By definition
-    # this is the forward orientation
-    reference_seq = next(sequences)
-    SeqIO.write(reference_seq, output_handle, "fasta")
-    best_orientations[reference_seq.id] = "forward"
-    for seq_record in sequences:
-        best_oriented_seq, best_name = best_orientation(
-            reference_seq.seq, seq_record.seq
-        )
-        best_orientations[seq_record.id] = best_name
-        reoriented_record = SeqRecord(
-            best_oriented_seq, id=seq_record.id, description=seq_record.description
-        )
-        SeqIO.write(reoriented_record, output_handle, "fasta")
-    input_handle.close()
+    logger.debug(f"Opening tempfile {output_fasta} for {input_fasta}")
+    output_handle = open(output_fasta, "w")
+    with open(input_fasta, "r") as input_handle:
+        sequences = SeqIO.parse(input_handle, "fasta")
+        # Get the first sequence as ref and write it to the output. By
+        # definition this is the forward orientation
+        logger.debug(f"Determining reference sequences for {input_fasta}")
+        try:
+            reference_seq = next(sequences)
+            logger.debug(f"{reference_seq.id} is the first sequence in {input_fasta}")
+            SeqIO.write(reference_seq, output_handle, "fasta")
+            best_orientations[reference_seq.id] = "forward"
+        except StopIteration:
+            logger.error(f"No sequences found in {input_fasta}")
+            return {}
+        for seq_record in sequences:
+            best_oriented_seq, best_name = best_orientation(
+                reference_seq.seq, seq_record.seq
+            )
+            best_orientations[seq_record.id] = best_name
+            reoriented_record = SeqRecord(
+                best_oriented_seq, id=seq_record.id, description=seq_record.description
+            )
+            SeqIO.write(reoriented_record, output_handle, "fasta")
+    logger.debug(f"Done writing {output_fasta}")
     output_handle.close()
     return best_orientations
 
@@ -84,21 +90,34 @@ def main():
     with Pool(processes=n_threads) as pool:
         results = pool.map(process_fasta, fasta_files)
 
-    logger.info(
-        f"Finished processing {len(results)} files"
-    )
+    logger.info(f"Finished processing {len(results)} files")
+
+    # Make a note if any of the inputs were empty
+    missing_results = []
     with tarfile.open(output_tarfile, "w") as tar, open(output_csv, "wt") as csv:
         csv.write("filename,sequence_id,orientation\n")
         for tmp_output_fasta, original_name, best_orientations in results:
             arcname = original_name
-            logger.info(f"Collecting results for {original_name}")
-            logger.info(f"Adding {tmp_output_fasta} to {output_tarfile}")
+            logger.debug(f"Collecting results for {original_name}")
+            logger.debug(f"Adding {tmp_output_fasta} to {output_tarfile}")
             tar.add(tmp_output_fasta, arcname=original_name)
-            logger.info(f"Recording orientations in {output_csv}")
-            for k, v in best_orientations.items():
-                csv.write(f"{original_name},{k},{v}\n")
+            logger.debug(f"Recording orientations in {output_csv}")
+            if best_orientations:
+                for k, v in best_orientations.items():
+                    csv.write(f"{original_name},{k},{v}\n")
+            else:
+                missing_results.append(original_name)
 
-    logger.info("\nDone")
+    if len(missing_results) > 0:
+        logger.error(
+            "Some FASTA files didn't return results. "
+            "Check if any of the following input files are empty."
+        )
+        logger.error(missing_results)
+        raise ValueError("Some FASTA files didn't return results.")
+
+    logger.info("Done")
+
 
 if __name__ == "__main__":
     main()
