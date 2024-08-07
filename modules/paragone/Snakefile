@@ -188,7 +188,7 @@ rule final_alignments:
     threads: workflow.cores
     resources:
         mem_mb=lambda wildcards, attempt: 8e3 * attempt,
-        time=lambda wildcards, attempt: 30 * attempt,
+        time=lambda wildcards, attempt: 60 * attempt,
     shadow:
         "minimal"
     container:

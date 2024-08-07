@@ -47,6 +47,7 @@ def reorient_sequences(input_fasta, output_fasta):
         # Get the first sequence as ref and write it to the output. By
         # definition this is the forward orientation
         logger.debug(f"Determining reference sequences for {input_fasta}")
+        # If there are zero records, we will return an empty dict
         try:
             reference_seq = next(sequences)
             logger.debug(f"{reference_seq.id} is the first sequence in {input_fasta}")
@@ -64,6 +65,14 @@ def reorient_sequences(input_fasta, output_fasta):
                 best_oriented_seq, id=seq_record.id, description=seq_record.description
             )
             SeqIO.write(reoriented_record, output_handle, "fasta")
+    # If there is aren't enough records, we will return an empty dict, because
+    # we can't align this.
+    n_recs = len(best_orientations.keys())
+    if n_recs < 3:
+        logger.error(
+            f"Only {n_recs} record(s) in {input_fasta}. This will cause paragone to fail with no error message. Better remove it."
+        )
+        return {}
     logger.debug(f"Done writing {output_fasta}")
     output_handle.close()
     return best_orientations
@@ -111,7 +120,7 @@ def main():
     if len(missing_results) > 0:
         logger.error(
             "Some FASTA files didn't return results. "
-            "Check if any of the following input files are empty."
+            "Check the following input files."
         )
         logger.error(missing_results)
         raise ValueError("Some FASTA files didn't return results.")
