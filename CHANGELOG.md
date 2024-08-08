@@ -1,5 +1,19 @@
 # Changelog
 
+## (unreleased)
+
+### New
+
+* Add outgroups for Captus align.
+
+## 0.3.04 (2024-08-07)
+
+### Other
+
+* Detect files with two or fewer sequences.
+
+* Changelog.
+
 ## 0.3.03 (2024-08-05)
 
 ### Fix
