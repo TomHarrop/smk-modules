@@ -10,6 +10,16 @@ import tempfile
 #############
 
 
+def format_outgroup(wildcards):
+    try:
+        outgroup = ",".join(config["outgroup"])
+    except KeyError:
+        logger.debug("No outgroup specified")
+        return ""
+    logger.debug(f"Setting outgroup to {outgroup}")
+    return f"--outgroup {outgroup}"
+
+
 def get_extract_asms(wildcards):
     all_samples = get_sample_list(wildcards)
     sample_files = expand(
@@ -77,6 +87,8 @@ rule align:
         input_directory=Path(outdir, "03_extractions"),
     output:
         outdir=directory(Path(outdir, "04_alignments")),
+    params:
+        outgroup=format_outgroup,
     log:
         Path(logdir, "align.log"),
     benchmark:
@@ -97,6 +109,7 @@ rule align:
         "--out {output.outdir} "
         '--ram "$(( {resources.mem_mb}/1000 ))" '
         "--threads {threads} "
+        "{params.outgroup} "
         "&> {log}"
 
 

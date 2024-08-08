@@ -43,25 +43,22 @@ all_samples = sorted(
     set(x.stem.split(".")[0] for x in read_directory.glob("*r1.fastq.gz"))
 )
 
+# You can use any sample(s) from the dataset as an outgroup to root the
+# alignments, but not samples from the target file.
+outgroup_samples = all_samples[-2:]
+
 # captus_snakefile = "../modules/captus/Snakefile"
 captus_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/captus/Snakefile",
-    tag="0.3.02",
+    tag="0.4.01",
 )
 
 
 captus_alignments = ["01_AA", "02_NT", "03_genes"]
 
 
-rule target:
-    input:
-        expand(
-            Path(
-                "test-output", "captus", "99_post-captus", "{alignment_type}"
-            ),
-            alignment_type=captus_alignments,
-        ),
+# target is at the end
 
 
 rule post_captus:
@@ -100,6 +97,22 @@ module captus:
 use rule * from captus as captus_*
 
 
+module captus_with_outgroup:
+    snakefile:
+        captus_snakefile
+    config:
+        {
+            "namelist": Path("test-data", "captus", "namelist.txt"),
+            "outgroup": outgroup_samples,  # a list of sample names
+            "read_directory": Path("test-output", "captus", "inputs"),
+            "target_file": target_file,
+            "outdir": Path("test-output", "captus_with_outgroup"),
+        }
+
+
+use rule * from captus_with_outgroup as captus_with_outgroup_*
+
+
 rule set_up_read_files:
     input:
         read_directory=Path(read_directory, "{sample}.r{r}.fastq.gz"),
@@ -115,3 +128,15 @@ rule generate_namelist:
     run:
         with open(output[0], "wt") as f:
             f.write("\n".join(all_samples))
+
+
+rule target:
+    default_target: True
+    input:
+        expand(
+            Path(
+                "test-output", "captus", "99_post-captus", "{alignment_type}"
+            ),
+            alignment_type=captus_alignments,
+        ),
+        rules.captus_with_outgroup_target.input,
