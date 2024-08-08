@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.02 (2024-08-08)
+
+### New
+
+* Aggressively decruft paragone input.
+
 ## 0.4.01 (2024-08-08)
 
 ### New
