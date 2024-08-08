@@ -357,10 +357,10 @@ rule check_and_align:
 
 rule orient_sequences:
     input:
-        Path(paralog_sequences),
+        input_directory=Path(paragone_directory, "decrufted_sequences"),
     output:
         tarfile=temp(Path(paragone_directory, "oriented_sequences.tar")),
-        csv=Path(outdir, "sequence_orientations.csv"),
+        csv=Path(outdir, "stats", "sequence_orientations.csv"),
     log:
         Path(logdir, "orient_sequences.log"),
     threads: get_orient_threads
@@ -368,3 +368,35 @@ rule orient_sequences:
         biopython
     script:
         "scripts/orient_sequences.py"
+
+
+# Hybpiper output contains a lot of junk sequences and empty paralogs. We'll
+# make a note and skip them.
+def max_gap_fract(wildcards):
+    try:
+        max_gap_fract = config["max_gap_fract"]
+        logger.debug(f"Got max_gap_fract {max_gap_fract}")
+        return max_gap_fract
+    except KeyError:
+        logger.debug("max_gap_fract not set")
+        return 0.0
+
+
+rule decruft_input:
+    input:
+        input_directory=Path(paralog_sequences),
+    output:
+        output_directory=temp(
+            directory(Path(paragone_directory, "decrufted_sequences"))
+        ),
+        seq_stats=Path(outdir, "stats", "seq_stats.csv.gz"),
+        removed_files=Path(outdir, "stats", "removed_files.txt"),
+    log:
+        Path(logdir, "decruft_input.log"),
+    params:
+        max_gap_fract=max_gap_fract,
+    threads: get_orient_threads
+    container:
+        biopython
+    script:
+        "scripts/decruft_input.py"

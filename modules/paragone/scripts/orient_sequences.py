@@ -83,7 +83,7 @@ def main():
     logger.logfile_handler = file_handler
     logger.logger.addHandler(logger.logfile_handler)
 
-    input_directory = snakemake.input[0]
+    input_directory = snakemake.input["input_directory"]
     output_tarfile = snakemake.output["tarfile"]
     output_csv = snakemake.output["csv"]
     n_threads = snakemake.threads
