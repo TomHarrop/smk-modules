@@ -47,11 +47,18 @@ all_samples = sorted(
 # alignments, but not samples from the target file.
 outgroup_samples = all_samples[-2:]
 
+# You can pass external FASTA files to captus extract, e.g. to make them into
+# an outgroup. It's much slower (e.g. this sample takes 4h 41m 9.2s on my
+# computer) so request a longer allocation for the extract step.
+external_fasta_files = [
+    Path("test-data", "captus", "GCF_008831285.2_ASM883128v2_genomic.fna")
+]
+
 # captus_snakefile = "../modules/captus/Snakefile"
 captus_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/captus/Snakefile",
-    tag="0.4.01",
+    tag="0.4.3",
 )
 
 
@@ -113,6 +120,23 @@ module captus_with_outgroup:
 use rule * from captus_with_outgroup as captus_with_outgroup_*
 
 
+module captus_with_external:
+    snakefile:
+        captus_snakefile
+    config:
+        {
+            "namelist": Path("test-data", "captus", "namelist.txt"),
+            "outgroup": [x.with_suffix("").name for x in external_fasta_files],
+            "external_fasta_files": external_fasta_files,
+            "read_directory": Path("test-output", "captus", "inputs"),
+            "target_file": target_file,
+            "outdir": Path("test-output", "captus_with_external"),
+        }
+
+
+use rule * from captus_with_external as captus_with_external_*
+
+
 rule set_up_read_files:
     input:
         read_directory=Path(read_directory, "{sample}.r{r}.fastq.gz"),
@@ -140,3 +164,4 @@ rule target:
             alignment_type=captus_alignments,
         ),
         rules.captus_with_outgroup_target.input,
+        rules.captus_with_external_target.input,

@@ -10,6 +10,27 @@ import tempfile
 #############
 
 
+@cache
+def get_external_fastas(wildcards):
+    try:
+        return config["external_fasta_files"]
+    except KeyError:
+        logger.debug("No external_fasta_files specified")
+        return None
+
+
+def format_external_fastas(wildcards):
+    external_fasta_files = get_external_fastas(wildcards)
+    if external_fasta_files:
+        external_fasta_paths = ",".join(
+            [x.as_posix() for x in external_fasta_files]
+        )
+        logger.debug(f"Setting external_fasta_files to {external_fasta_paths}")
+        return f"--fastas {external_fasta_paths}"
+    else:
+        return ""
+
+
 def format_outgroup(wildcards):
     try:
         outgroup = ",".join(config["outgroup"])
@@ -22,11 +43,16 @@ def format_outgroup(wildcards):
 
 def get_extract_asms(wildcards):
     all_samples = get_sample_list(wildcards)
+    external_fasta_files = get_external_fastas(wildcards)
     sample_files = expand(
         Path("05_extract-input", "{sample}__captus-asm"),
         sample=all_samples,
     )
-    return [Path(outdir, x) for x in sample_files]
+    sample_paths = [Path(outdir, x) for x in sample_files]
+    if external_fasta_files:
+        return sample_paths + external_fasta_files
+    else:
+        return sample_paths
 
 
 def get_sample_list(wildcards):
@@ -136,6 +162,7 @@ rule extract:
         refs_json=Path(outdir, "captus-assembly_extract.refs.json"),
     params:
         asms=lambda wildcards, input: Path(input.asms[0]).parent,
+        external_fastas=format_external_fastas,
     log:
         Path(logdir, "extract.log"),
     benchmark:
@@ -151,6 +178,7 @@ rule extract:
     shell:
         "captus_assembly extract "
         "--captus_assemblies_dir {params.asms} "
+        "{params.external_fastas} "
         "--out {output.outdir}/. "
         "--nuc_refs {input.target_file} "
         "--mit_refs SeedPlantsMIT "
