@@ -1,0 +1,42 @@
+#! /usr/bin/env python3
+
+from pathlib import Path
+
+
+###########
+# GLOBALS #
+###########
+
+# containers
+bwa = "docker://quay.io/biocontainers/bwa:0.7.18--he4a0461_1"
+
+ref = Path(config["ref_genome"])
+outdir = Path(config["outdir"])
+logdir = Path(outdir, "logs")
+
+#########
+# RULES #
+#########
+
+
+rule bwa_index:
+    input:
+        ref,
+    output:
+        multiext(
+            Path(outdir, "010_ref", "ref.fasta.").as_posix(),
+            "amb",
+            "ann",
+            "bwt",
+            "pac",
+            "sa",
+        ),
+    params:
+        prefix=lambda wildcards, output: Path(output[0]).with_suffix(""),
+    log:
+        Path(logdir, "bwa_index.log"),
+    shell:
+        "bwa index "
+        "-p {params.prefix} "
+        "{input} "
+        "2> {log}"
