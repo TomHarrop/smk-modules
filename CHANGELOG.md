@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.3 (2024-08-09)
+
+### New
+
+* Add external reference sequence to captus extract.
+
 ## 0.4.02 (2024-08-08)
 
 ### New
