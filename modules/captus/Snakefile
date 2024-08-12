@@ -19,6 +19,15 @@ def get_external_fastas(wildcards):
         return None
 
 
+@cache
+def get_misc_markers(wildcards):
+    try:
+        return config["misc_markers"]
+    except KeyError:
+        logger.debug("No misc_markers specified")
+        return None
+
+
 def format_external_fastas(wildcards):
     external_fasta_files = get_external_fastas(wildcards)
     if external_fasta_files:
@@ -27,6 +36,16 @@ def format_external_fastas(wildcards):
         )
         logger.debug(f"Setting external_fasta_files to {external_fasta_paths}")
         return f"--fastas {external_fasta_paths}"
+    else:
+        return ""
+
+
+def format_misc_markers(wildcards):
+    misc_marker_files = get_misc_markers(wildcards)
+    if misc_marker_files:
+        misc_marker_paths = ",".join([x.as_posix() for x in misc_marker_files])
+        logger.debug(f"Setting misc_markers to {misc_marker_paths}")
+        return f"--dna_refs {misc_marker_paths}"
     else:
         return ""
 
@@ -44,15 +63,17 @@ def format_outgroup(wildcards):
 def get_extract_asms(wildcards):
     all_samples = get_sample_list(wildcards)
     external_fasta_files = get_external_fastas(wildcards)
+    misc_markers = get_misc_markers(wildcards)
     sample_files = expand(
         Path("05_extract-input", "{sample}__captus-asm"),
         sample=all_samples,
     )
     sample_paths = [Path(outdir, x) for x in sample_files]
     if external_fasta_files:
-        return sample_paths + external_fasta_files
-    else:
-        return sample_paths
+        sample_paths = sample_paths + external_fasta_files
+    if misc_markers:
+        sample_paths = sample_paths + misc_markers
+    return sample_paths
 
 
 def get_sample_list(wildcards):
@@ -163,6 +184,7 @@ rule extract:
     params:
         asms=lambda wildcards, input: Path(input.asms[0]).parent,
         external_fastas=format_external_fastas,
+        misc_markers=format_misc_markers,
     log:
         Path(logdir, "extract.log"),
     benchmark:
@@ -179,6 +201,7 @@ rule extract:
         "captus_assembly extract "
         "--captus_assemblies_dir {params.asms} "
         "{params.external_fastas} "
+        "{params.misc_markers} "
         "--out {output.outdir}/. "
         "--nuc_refs {input.target_file} "
         "--mit_refs SeedPlantsMIT "

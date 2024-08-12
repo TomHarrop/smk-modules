@@ -54,11 +54,16 @@ external_fasta_files = [
     Path("test-data", "captus", "GCF_008831285.2_ASM883128v2_genomic.fna")
 ]
 
+# You can add miscellaneous DNA markers at the extract stage. Testing with the
+# rhizanthella ITS sequences from genbank (retrieved from the nucleotide db by
+# searching 'txid158356[Organism:exp]')
+misc_dna = [Path("test-data", "captus", "rhizanthella_loci.fasta")]
+
 # captus_snakefile = "../modules/captus/Snakefile"
 captus_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/captus/Snakefile",
-    tag="0.4.3",
+    tag="0.4.4",
 )
 
 
@@ -137,6 +142,22 @@ module captus_with_external:
 use rule * from captus_with_external as captus_with_external_*
 
 
+module captus_with_misc:
+    snakefile:
+        captus_snakefile
+    config:
+        {
+            "namelist": Path("test-data", "captus", "namelist.txt"),
+            "read_directory": Path("test-output", "captus", "inputs"),
+            "target_file": target_file,
+            "misc_markers": misc_dna,
+            "outdir": Path("test-output", "captus_with_misc"),
+        }
+
+
+use rule * from captus_with_misc as captus_with_misc_*
+
+
 rule set_up_read_files:
     input:
         read_directory=Path(read_directory, "{sample}.r{r}.fastq.gz"),
@@ -165,3 +186,4 @@ rule target:
         ),
         rules.captus_with_outgroup_target.input,
         rules.captus_with_external_target.input,
+        rules.captus_with_misc_target.input,
