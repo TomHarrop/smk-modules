@@ -117,7 +117,7 @@ def main(
     logger.info(f"Recording {len(empty_files)} empty files in {removed_files}")
     with open(removed_files, "w") as ef:
         ef.write("Empty files:\n")
-        ef.write("\n".join(empty_files))
+        ef.write("\n".join([x.as_posix() for x in empty_files]))
         ef.write("\nFiles with less than three records:\n")
         ef.write("\n".join(files_without_enough_records))
         ef.write("\n")
