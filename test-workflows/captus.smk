@@ -63,7 +63,7 @@ misc_dna = [Path("test-data", "captus", "rhizanthella_loci.fasta")]
 captus_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/captus/Snakefile",
-    tag="0.4.4",
+    tag="0.4.6",
 )
 
 

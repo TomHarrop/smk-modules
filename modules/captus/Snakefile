@@ -94,11 +94,13 @@ def read_namelist(namelist):
 # containers
 captus = "docker://quay.io/biocontainers/captus:1.0.1--pyhdfd78af_2"
 python = "docker://python:3.10.14"
+r = "docker://ghcr.io/tomharrop/r-containers:r2u_24.04"
 
 # set up directories
 outdir = Path(config["outdir"] if "outdir" in config else ".")
 logger.debug(f"outdir: {outdir}")
 logdir = Path(outdir, "logs")
+statdir = Path(outdir, "stats")
 
 # catch samples and
 namelist = config["namelist"]
@@ -126,6 +128,7 @@ rule target:
     input:
         Path(outdir, "04_alignments"),
         Path(outdir, "captus-assembly_extract.refs.json.fixed"),
+        Path(statdir, "captus-assembly_extract.sample_stats_by_wscore.csv"),
 
 
 rule align:
@@ -172,6 +175,32 @@ rule replace_temporary_paths:
         python
     script:
         "scripts/replace_temporary_paths.py"
+
+
+rule extract_summary_stats:
+    input:
+        captus_extraction_dir=Path(outdir, "03_extractions"),
+    output:
+        sample_stats_by_wscore=Path(
+            statdir, "captus-assembly_extract.sample_stats_by_wscore.csv"
+        ),
+        sample_stats_by_pct_recovered=Path(
+            statdir,
+            "captus-assembly_extract.sample_stats_by_pct_recovered.csv",
+        ),
+    params:
+        captus_extraction_stats=Path(
+            outdir, "03_extractions", "captus-assembly_extract.stats.tsv"
+        ).as_posix(),
+    log:
+        Path(
+            logdir,
+            "extract_summary_stats.log",
+        ),
+    container:
+        r
+    script:
+        "scripts/extract_summary_stats.R"
 
 
 rule extract:
