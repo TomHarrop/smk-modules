@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.6 (2024-08-15)
+
+### New
+
+* Generate sample stats from Captus extractions.
+
 ## 0.4.5 (2024-08-13)
 
 ### Fix
