@@ -9,14 +9,19 @@ output_directory = Path(
     "trimal",
 )
 
-datasets = [x.name for x in test_alignments.glob("*") if x.is_dir()]
-
+# For now, don't run trimal on the already-trimalled alignment. Trimal removes
+# all sequences from some alignments on the second pass.
+datasets = [
+    x.name
+    for x in test_alignments.glob("*")
+    if (x.is_dir() and not "trimal" in x.name)
+]
 
 # trimal_snakefile = "../modules/trimal/Snakefile"
 trimal_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/trimal/Snakefile",
-    tag="0.5.1",
+    tag="0.5.2",
 )
 
 

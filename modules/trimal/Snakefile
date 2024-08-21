@@ -112,10 +112,10 @@ rule collect_fasta:
 
 checkpoint collect_input:
     input:
-        alignment_directory,
+        alignment_directory=alignment_directory,
     output:
         tmpdir=directory(tmp_alignments),
     shell:
         "ln -s "
-        "$( readlink -f {input} ) "
+        "$( readlink -f {input.alignment_directory} ) "
         "$( readlink -f {output.tmpdir} )"
