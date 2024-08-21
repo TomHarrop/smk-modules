@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.2 (2024-08-21)
+
+### Fix
+
+* Don't run trimal twice on the same alignments.
+
 ## 0.5.1 (2024-08-21)
 
 ### New
