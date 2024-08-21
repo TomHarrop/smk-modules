@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1 (2024-08-21)
+
+### New
+
+* Run trimal on a folder of alignments.
+
 ## 0.4.6 (2024-08-15)
 
 ### New
