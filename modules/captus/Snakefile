@@ -1,5 +1,6 @@
 from functools import cache
 from snakemake.logging import logger
+from snakemake.exceptions import WildcardError
 import re
 import shutil
 import tempfile
@@ -81,6 +82,32 @@ def get_sample_list(wildcards):
     return read_namelist(namelist_file)
 
 
+def get_wscore_cutoff(wildcards):
+    try:
+        minimum_sample_wscore = config["minimum_sample_wscore"]
+    except KeyError:
+        logger.debug("No minimum_sample_wscore specified")
+        return "0.0"
+    try:
+        minimum_sample_wscore = float(minimum_sample_wscore)
+        logger.debug(
+            f"Setting minimum_sample_wscore to {minimum_sample_wscore}"
+        )
+    except ValueError:
+        logger.warning("Checking if minimum_sample_wscore is a wildcard")
+        try:
+            minimum_sample_wscore = wildcards.minimum_sample_wscore
+        except AttributeError as e:
+            logger.warning(
+                """
+If you are tried to set minimum_sample_wscore as a wildcard, 
+make sure the wildcard is called 'minimum_sample_wscore'
+                """
+            )
+            raise e
+    return minimum_sample_wscore
+
+
 @cache
 def read_namelist(namelist):
     with open(namelist, "rt") as f:
@@ -92,6 +119,7 @@ def read_namelist(namelist):
 ###########
 
 # containers
+bioawk = "docker://quay.io/biocontainers/bioawk:1.0--he4a0461_12"
 captus = "docker://quay.io/biocontainers/captus:1.0.1--pyhdfd78af_2"
 python = "docker://python:3.10.14"
 r = "docker://ghcr.io/tomharrop/r-containers:r2u_24.04"
@@ -102,7 +130,7 @@ logger.debug(f"outdir: {outdir}")
 logdir = Path(outdir, "logs")
 statdir = Path(outdir, "stats")
 
-# catch samples and
+# catch samples
 namelist = config["namelist"]
 logger.debug(f"Caught namelist: {namelist}")
 
@@ -134,7 +162,7 @@ rule target:
 rule align:
     input:
         fixed_refs=Path(outdir, "captus-assembly_extract.refs.json.fixed"),
-        input_directory=Path(outdir, "03_extractions"),
+        input_directory=Path(outdir, "035_alignment-input"),
     output:
         outdir=directory(Path(outdir, "04_alignments")),
     params:
@@ -166,7 +194,7 @@ rule align:
 rule replace_temporary_paths:
     input:
         tmp_json_path=Path(outdir, "captus-assembly_extract.refs.json"),
-        extraction_dir=Path(outdir, "03_extractions"),
+        extraction_dir=Path(outdir, "035_alignment-input"),
     output:
         fixed_json=Path(outdir, "captus-assembly_extract.refs.json.fixed"),
     log:
@@ -175,6 +203,51 @@ rule replace_temporary_paths:
         python
     script:
         "scripts/replace_temporary_paths.py"
+
+
+rule setup_alignment_input:
+    input:
+        extraction_dir=Path(outdir, "03_extractions"),
+        failed_samples=Path(statdir, "samples_failing_filter.txt"),
+    output:
+        alignment_dir=temp(directory(Path(outdir, "035_alignment-input"))),
+    container:
+        bioawk
+    shadow:
+        "minimal"
+    shell:
+        "cp -r {input.extraction_dir} {output.alignment_dir} ; "
+        "while read sample; do "
+        'rm -r "{output.alignment_dir}/${{sample}}__captus-ext" ; '
+        "done < {input.failed_samples}"
+
+
+# lookup the median wscore for each sample and make a list of samples that pass
+rule wscore_filter:
+    input:
+        sample_stats_by_wscore=Path(
+            statdir, "captus-assembly_extract.sample_stats_by_wscore.csv"
+        ),
+    output:
+        failed_samples=Path(statdir, "samples_failing_filter.txt"),
+    params:
+        wscore_cutoff=get_wscore_cutoff,
+    container:
+        bioawk
+    shell:
+        "awk -F, "
+        "'NR == 1 {{ "
+        "   for (i = 1; i <= NF; i++) {{ "
+        '       if ($i == "wscore_median") wscore_col = i ; '
+        '       if ($i == "marker_type") marker_col = i ; '
+        "   }} "
+        "}}"
+        "NR > 1 "
+        "&& $wscore_col < {params.wscore_cutoff} "
+        '&& $marker_col == "NUC" '
+        "{{ print $1 }} ' "
+        "{input.sample_stats_by_wscore} "
+        "> {output.failed_samples}"
 
 
 rule extract_summary_stats:

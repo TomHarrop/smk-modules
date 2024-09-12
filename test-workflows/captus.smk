@@ -54,17 +54,27 @@ external_fasta_files = [
     Path("test-data", "captus", "GCF_008831285.2_ASM883128v2_genomic.fna")
 ]
 
+# WHAT HAPPENS IF LOCI ARE DUPLICATED IN THE TARGET FILE?
+# NC_045138.2 has the most hits so could use that. First try NC_045147.1, which has a hit for 5858, which is the first locus in the target file
+single_chr_fasta_files = [
+    # Path("test-data", "captus", "NC_045138.2.fasta")
+    Path("test-data", "captus", "NC_045147.1.fasta")
+]
+target_file_with_duplicated_loci = Path(
+    "test-data", "captus", "target_file_with_duplicated_loci.fasta"
+)
+
 # You can add miscellaneous DNA markers at the extract stage. Testing with the
 # rhizanthella ITS sequences from genbank (retrieved from the nucleotide db by
 # searching 'txid158356[Organism:exp]')
 misc_dna = [Path("test-data", "captus", "rhizanthella_loci.fasta")]
 
-# captus_snakefile = "../modules/captus/Snakefile"
-captus_snakefile = github(
-    "tomharrop/smk-modules",
-    path="modules/captus/Snakefile",
-    tag="0.4.6",
-)
+captus_snakefile = "../modules/captus/Snakefile"
+# captus_snakefile = github(
+#     "tomharrop/smk-modules",
+#     path="modules/captus/Snakefile",
+#     tag="0.4.6",
+# )
 
 
 captus_alignments = ["01_AA", "02_NT", "03_genes"]
@@ -77,11 +87,7 @@ rule post_captus:
     input:
         Path("test-output", "captus", "04_alignments"),
     output:
-        directory(
-            Path(
-                "test-output", "captus", "99_post-captus", "{alignment_type}"
-            )
-        ),
+        directory(Path(output_directory, "99_post-captus", "{alignment_type}")),
     params:
         alignment_dir=get_alignment_dir,
     shell:
@@ -100,9 +106,9 @@ module captus:
     config:
         {
             "namelist": Path("test-data", "captus", "namelist.txt"),
-            "read_directory": Path("test-output", "captus", "inputs"),
+            "read_directory": Path(output_directory, "inputs"),
             "target_file": target_file,
-            "outdir": Path("test-output", "captus"),
+            "outdir": Path(output_directory, "plain_captus"),
         }
 
 
@@ -116,9 +122,9 @@ module captus_with_outgroup:
         {
             "namelist": Path("test-data", "captus", "namelist.txt"),
             "outgroup": outgroup_samples,  # a list of sample names
-            "read_directory": Path("test-output", "captus", "inputs"),
+            "read_directory": Path(output_directory, "inputs"),
             "target_file": target_file,
-            "outdir": Path("test-output", "captus_with_outgroup"),
+            "outdir": Path(output_directory, "with_outgroup"),
         }
 
 
@@ -133,13 +139,29 @@ module captus_with_external:
             "namelist": Path("test-data", "captus", "namelist.txt"),
             "outgroup": [x.with_suffix("").name for x in external_fasta_files],
             "external_fasta_files": external_fasta_files,
-            "read_directory": Path("test-output", "captus", "inputs"),
+            "read_directory": Path(output_directory, "inputs"),
             "target_file": target_file,
-            "outdir": Path("test-output", "captus_with_external"),
+            "outdir": Path(output_directory, "with_external"),
         }
 
 
 use rule * from captus_with_external as captus_with_external_*
+
+
+module captus_with_duplicate_loci:
+    snakefile:
+        captus_snakefile
+    config:
+        {
+            "namelist": Path("test-data", "captus", "namelist.txt"),
+            "external_fasta_files": single_chr_fasta_files,
+            "read_directory": Path(output_directory, "inputs"),
+            "target_file": target_file_with_duplicated_loci,
+            "outdir": Path(output_directory, "with_duplicate_loci"),
+        }
+
+
+use rule * from captus_with_duplicate_loci as captus_with_duplicate_loci_*
 
 
 module captus_with_misc:
@@ -148,21 +170,45 @@ module captus_with_misc:
     config:
         {
             "namelist": Path("test-data", "captus", "namelist.txt"),
-            "read_directory": Path("test-output", "captus", "inputs"),
+            "read_directory": Path(output_directory, "inputs"),
             "target_file": target_file,
             "misc_markers": misc_dna,
-            "outdir": Path("test-output", "captus_with_misc"),
+            "outdir": Path(output_directory, "with_misc"),
         }
 
 
 use rule * from captus_with_misc as captus_with_misc_*
 
 
+module captus_with_wscore_cutoff:
+    snakefile:
+        captus_snakefile
+    config:
+        {
+            "namelist": Path("test-data", "captus", "namelist.txt"),
+            "outdir": Path(output_directory, "with_wscore_cutoff.{minimum_sample_wscore}"),
+            "read_directory": Path(output_directory, "inputs"),
+            "target_file": target_file,
+            "minimum_sample_wscore": "{minimum_sample_wscore}",
+        }
+
+
+use rule * from captus_with_wscore_cutoff as captus_with_wscore_cutoff_*
+
+
+rule test_target:
+    input:
+        expand(
+            rules.captus_with_wscore_cutoff_target.input,
+            minimum_sample_wscore=["0", "0.2", "0.3"],
+        ),
+
+
 rule set_up_read_files:
     input:
         read_directory=Path(read_directory, "{sample}.r{r}.fastq.gz"),
     output:
-        temp(Path("test-output", "captus", "inputs", "{sample}.r{r}.fastq.gz")),
+        temp(Path(output_directory, "inputs", "{sample}.r{r}.fastq.gz")),
     shell:
         "ln -s $( readlink -f {input} ) $( readlink -f {output} )"
 
@@ -179,11 +225,11 @@ rule target:
     default_target: True
     input:
         expand(
-            Path(
-                "test-output", "captus", "99_post-captus", "{alignment_type}"
-            ),
+            Path(output_directory, "99_post-captus", "{alignment_type}"),
             alignment_type=captus_alignments,
         ),
-        rules.captus_with_outgroup_target.input,
+        rules.captus_with_duplicate_loci_target.input,
         rules.captus_with_external_target.input,
         rules.captus_with_misc_target.input,
+        rules.captus_with_outgroup_target.input,
+        rules.captus_with_wscore_cutoff_target.input,
