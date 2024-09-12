@@ -100,7 +100,7 @@ def get_wscore_cutoff(wildcards):
         except AttributeError as e:
             logger.warning(
                 """
-If you are tried to set minimum_sample_wscore as a wildcard, 
+If you tried to set minimum_sample_wscore as a wildcard, 
 make sure the wildcard is called 'minimum_sample_wscore'
                 """
             )
