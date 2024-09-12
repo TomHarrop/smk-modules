@@ -132,7 +132,7 @@ statdir = Path(outdir, "stats")
 
 # catch samples
 namelist = config["namelist"]
-logger.warning(f"Caught namelist: {namelist}")
+logger.debug(f"Caught namelist: {namelist}")
 
 # catch read directory
 read_directory = Path(config["read_directory"])

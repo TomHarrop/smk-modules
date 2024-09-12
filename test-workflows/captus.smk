@@ -85,7 +85,7 @@ captus_alignments = ["01_AA", "02_NT", "03_genes"]
 
 rule post_captus:
     input:
-        Path("test-output", "captus", "04_alignments"),
+        Path(output_directory, "plain_captus", "04_alignments"),
     output:
         directory(Path(output_directory, "99_post-captus", "{alignment_type}")),
     params:
