@@ -66,10 +66,10 @@ def get_extract_asms(wildcards):
     external_fasta_files = get_external_fastas(wildcards)
     misc_markers = get_misc_markers(wildcards)
     sample_files = expand(
-        Path("05_extract-input", "{sample}__captus-asm"),
+        Path("{sample}__captus-asm"),
         sample=all_samples,
     )
-    sample_paths = [Path(outdir, x) for x in sample_files]
+    sample_paths = [Path(outdir, "05_extract-input", x) for x in sample_files]
     if external_fasta_files:
         sample_paths = sample_paths + external_fasta_files
     if misc_markers:
@@ -86,11 +86,11 @@ def get_wscore_cutoff(wildcards):
     try:
         minimum_sample_wscore = config["minimum_sample_wscore"]
     except KeyError:
-        logger.debug("No minimum_sample_wscore specified")
+        logger.warning("No minimum_sample_wscore specified")
         return "0.0"
     try:
         minimum_sample_wscore = float(minimum_sample_wscore)
-        logger.debug(
+        logger.warning(
             f"Setting minimum_sample_wscore to {minimum_sample_wscore}"
         )
     except ValueError:
@@ -132,7 +132,7 @@ statdir = Path(outdir, "stats")
 
 # catch samples
 namelist = config["namelist"]
-logger.debug(f"Caught namelist: {namelist}")
+logger.warning(f"Caught namelist: {namelist}")
 
 # catch read directory
 read_directory = Path(config["read_directory"])

@@ -115,6 +115,26 @@ module captus:
 use rule * from captus as captus_*
 
 
+# do this one first, otherwise the wildcard here clobbers the checkpoints in
+# other modules. Probably a bug?
+module captus_with_wscore_cutoff:
+    snakefile:
+        captus_snakefile
+    config:
+        {
+            "namelist": Path("test-data", "captus", "namelist.txt"),
+            "outdir": Path(
+                output_directory, "with_wscore_cutoff.{minimum_sample_wscore}"
+            ),
+            "read_directory": Path(output_directory, "inputs"),
+            "target_file": target_file,
+            "minimum_sample_wscore": "{minimum_sample_wscore}",
+        }
+
+
+use rule * from captus_with_wscore_cutoff as captus_with_wscore_cutoff_*
+
+
 module captus_with_outgroup:
     snakefile:
         captus_snakefile
@@ -178,24 +198,6 @@ module captus_with_misc:
 
 
 use rule * from captus_with_misc as captus_with_misc_*
-
-
-module captus_with_wscore_cutoff:
-    snakefile:
-        captus_snakefile
-    config:
-        {
-            "namelist": Path("test-data", "captus", "namelist.txt"),
-            "outdir": Path(
-                output_directory, "with_wscore_cutoff.{minimum_sample_wscore}"
-            ),
-            "read_directory": Path(output_directory, "inputs"),
-            "target_file": target_file,
-            "minimum_sample_wscore": "{minimum_sample_wscore}",
-        }
-
-
-use rule * from captus_with_wscore_cutoff as captus_with_wscore_cutoff_*
 
 
 rule set_up_read_files:
