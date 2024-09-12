@@ -186,7 +186,9 @@ module captus_with_wscore_cutoff:
     config:
         {
             "namelist": Path("test-data", "captus", "namelist.txt"),
-            "outdir": Path(output_directory, "with_wscore_cutoff.{minimum_sample_wscore}"),
+            "outdir": Path(
+                output_directory, "with_wscore_cutoff.{minimum_sample_wscore}"
+            ),
             "read_directory": Path(output_directory, "inputs"),
             "target_file": target_file,
             "minimum_sample_wscore": "{minimum_sample_wscore}",
@@ -194,14 +196,6 @@ module captus_with_wscore_cutoff:
 
 
 use rule * from captus_with_wscore_cutoff as captus_with_wscore_cutoff_*
-
-
-rule test_target:
-    input:
-        expand(
-            rules.captus_with_wscore_cutoff_target.input,
-            minimum_sample_wscore=["0", "0.2", "0.3"],
-        ),
 
 
 rule set_up_read_files:
@@ -232,4 +226,7 @@ rule target:
         rules.captus_with_external_target.input,
         rules.captus_with_misc_target.input,
         rules.captus_with_outgroup_target.input,
-        rules.captus_with_wscore_cutoff_target.input,
+        expand(
+            rules.captus_with_wscore_cutoff_target.input,
+            minimum_sample_wscore=["0", "0.2", "0.3"],
+        ),
