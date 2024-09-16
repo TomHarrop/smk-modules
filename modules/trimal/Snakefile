@@ -66,6 +66,8 @@ rule collect_output:
     params:
         tmp_outdir=lambda wildcards, input: Path(input[0]).parent,
         tmpdir=lambda wildcards, input: Path(input[0]).parent.parent,
+    resources:
+        time=lambda wildcards, attempt: 30 * attempt,
     shell:
         "mv {params.tmp_outdir} {output} "
         "&& rm -r {params.tmpdir} "
@@ -83,6 +85,8 @@ rule trimal:
     threads: 1
     container:
         trimal
+    shadow:
+        "minimal"
     shell:
         "trimal "
         "-in {input.fasta} "
