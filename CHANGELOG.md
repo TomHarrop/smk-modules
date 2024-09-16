@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.6.2 (2024-09-16)
+
+### Fix
+
+* More time to tidy up trimal oiutput.
+
+## 0.6.1 (2024-09-12)
+
+### New
+
+* Add a wscore filter to captus.
+
+* Add a wscore filter to captus.
+
+### Other
+
+* Run captus with cutoffs.
+
+* Run captus with cutoffs.
+
+* Run captus with cutoffs.
+
+* Run captus with cutoffs.
+
 ## 0.5.2 (2024-08-21)
 
 ### Fix
