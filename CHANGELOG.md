@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.3 (2024-09-19)
+
+### Fix
+
+* Trimal - create fewer tempfiles.
+
 ## 0.6.2 (2024-09-16)
 
 ### Fix
