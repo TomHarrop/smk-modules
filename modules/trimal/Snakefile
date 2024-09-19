@@ -9,7 +9,9 @@ from snakemake.logging import logger
 def get_fasta(wildcards):
     all_fastas = [Path(x) for x in list_fastas(wildcards)]
     return [
-        Path(tmp_alignments, x) for x in all_fastas if x.stem == wildcards.id
+        Path(alignment_directory, x)
+        for x in all_fastas
+        if x.stem == wildcards.id
     ][0]
 
 
@@ -19,15 +21,16 @@ def get_output_fastas(wildcards):
 
 
 def get_tmpdir_checkpoint(wildcards):
-    return checkpoints.collect_input.get(**wildcards).output["tmpdir"]
+    return checkpoints.wait_for_input.get(**wildcards).output["input_ready"]
 
 
 @cache
 def list_fastas(wildcards):
     tmpdir = get_tmpdir_checkpoint(wildcards)
+    my_alignment_directory = alignment_directory.format(**wildcards)
     fastas = [
         f.name
-        for f in Path(tmpdir).glob("*")
+        for f in Path(my_alignment_directory).glob("*")
         if (not f.name.startswith(".") and fasta_pattern.match(f.suffix))
     ]
     return fastas
@@ -48,8 +51,6 @@ tmpdir = Path(outdir, "tmp")
 # catch alignmnt directory
 alignment_directory = f"{config['alignment_directory']}"
 
-tmp_alignments = Path(tmpdir, "tmp_alignments")
-tmp_indir = Path(tmpdir, "tmp_input")
 tmp_outdir = Path(tmpdir, "tmp_output")
 
 
@@ -65,17 +66,17 @@ rule collect_output:
         directory(Path(outdir, "trimmed")),
     params:
         tmp_outdir=lambda wildcards, input: Path(input[0]).parent,
-        tmpdir=lambda wildcards, input: Path(input[0]).parent.parent,
+        tmpdir=lambda wildcards: tmpdir.as_posix().format(**wildcards),
     resources:
         time=lambda wildcards, attempt: 30 * attempt,
     shell:
-        "mv {params.tmp_outdir} {output} "
-        "&& rm -r {params.tmpdir} "
+        "mv {params.tmp_outdir} {output} && "
+        "rm -r {params.tmpdir} "
 
 
 rule trimal:
     input:
-        fasta=Path(tmp_indir, "{id}.fasta"),
+        fasta=get_fasta,
     output:
         fasta=Path(tmp_outdir, "{id}.fasta"),
     log:
@@ -103,23 +104,8 @@ rule trimal:
         "2> {log.log}"
 
 
-rule collect_fasta:
-    input:
-        get_fasta,
-    output:
-        Path(tmp_indir, "{id}.fasta"),
-    shell:
-        "ln -s "
-        "$( readlink -f {input} ) "
-        "$( readlink -f {output} )"
-
-
-checkpoint collect_input:
+checkpoint wait_for_input:
     input:
         alignment_directory=alignment_directory,
     output:
-        tmpdir=directory(tmp_alignments),
-    shell:
-        "ln -s "
-        "$( readlink -f {input.alignment_directory} ) "
-        "$( readlink -f {output.tmpdir} )"
+        input_ready=touch(Path(tmpdir, "input_ready")),
