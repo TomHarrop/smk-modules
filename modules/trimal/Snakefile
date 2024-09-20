@@ -20,13 +20,13 @@ def get_output_fastas(wildcards):
     return [Path(tmp_outdir, x).with_suffix(".fasta") for x in all_fastas]
 
 
-def get_tmpdir_checkpoint(wildcards):
+def wait_for_input(wildcards):
     return checkpoints.wait_for_input.get(**wildcards).output["input_ready"]
 
 
 @cache
 def list_fastas(wildcards):
-    tmpdir = get_tmpdir_checkpoint(wildcards)
+    wait_for_input(wildcards)
     my_alignment_directory = alignment_directory.format(**wildcards)
     fastas = [
         f.name
@@ -66,19 +66,20 @@ rule collect_output:
         directory(Path(outdir, "trimmed")),
     params:
         tmp_outdir=lambda wildcards, input: Path(input[0]).parent,
-        tmpdir=lambda wildcards: tmpdir.as_posix().format(**wildcards),
     resources:
-        time=lambda wildcards, attempt: 30 * attempt,
+        time=lambda wildcards, attempt: 10 * attempt,
+    # to prevent the slow NFS transfer taking time away from the rule
+    shadow:
+        "copy-minimal"
     shell:
-        "mv {params.tmp_outdir} {output} && "
-        "rm -r {params.tmpdir} "
+        "cp -r {params.tmp_outdir} {output}"
 
 
 rule trimal:
     input:
         fasta=get_fasta,
     output:
-        fasta=Path(tmp_outdir, "{id}.fasta"),
+        fasta=temp(Path(tmp_outdir, "{id}.fasta")),
     log:
         log=Path(logdir, "trimal.{id}.log"),
         stats=Path(logdir, "trimal.{id}.stats.txt"),
@@ -108,4 +109,4 @@ checkpoint wait_for_input:
     input:
         alignment_directory=alignment_directory,
     output:
-        input_ready=touch(Path(tmpdir, "input_ready")),
+        input_ready=touch(Path(outdir, "input_ready")),

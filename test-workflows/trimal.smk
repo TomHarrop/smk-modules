@@ -21,7 +21,7 @@ datasets = [
 trimal_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/trimal/Snakefile",
-    tag="0.6.3",
+    tag="0.6.4",
 )
 
 
