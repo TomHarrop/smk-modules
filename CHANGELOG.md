@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.4 (2024-09-20)
+
+### Fix
+
+* Try not to use job time to copy file.
+
 ## 0.6.3 (2024-09-19)
 
 ### Fix
