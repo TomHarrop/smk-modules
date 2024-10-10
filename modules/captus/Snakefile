@@ -142,6 +142,15 @@ logger.debug(f"Caught read_directory: {read_directory}")
 target_file = Path(config["target_file"])
 logger.debug(f"Caught target_file: {target_file}")
 
+# catch options
+cluster_leftovers = config.get("cluster_leftovers", True)
+if cluster_leftovers:
+    cluster_param = "--cluster_leftovers --mmseqs_method easy-cluster "
+    extract_refs = Path(outdir, "captus-assembly_extract.refs.json.fixed")
+else:
+    cluster_param = ""
+    extract_refs = Path(outdir, "captus-assembly_extract.refs.json")
+
 # Captus translates the target file silently but writes it next to the input,
 # so we can't pick it up as ouput from a shadow rule.
 translated_targets = target_file.with_suffix(".captus.faa")
@@ -155,13 +164,13 @@ translated_targets = target_file.with_suffix(".captus.faa")
 rule target:
     input:
         Path(outdir, "04_alignments"),
-        Path(outdir, "captus-assembly_extract.refs.json.fixed"),
+        extract_refs,
         Path(statdir, "captus-assembly_extract.sample_stats_by_wscore.csv"),
 
 
 rule align:
     input:
-        fixed_refs=Path(outdir, "captus-assembly_extract.refs.json.fixed"),
+        fixed_refs=extract_refs,
         input_directory=Path(outdir, "035_alignment-input"),
     output:
         outdir=directory(Path(outdir, "04_alignments")),
@@ -191,6 +200,7 @@ rule align:
         "&> {log}"
 
 
+
 rule replace_temporary_paths:
     input:
         tmp_json_path=Path(outdir, "captus-assembly_extract.refs.json"),
@@ -218,7 +228,9 @@ rule setup_alignment_input:
     shell:
         "cp -r {input.extraction_dir} {output.alignment_dir} ; "
         "while read sample; do "
+        "if [ -d {output.alignment_dir}/${{sample}}__captus-ext ]; then "
         'rm -r "{output.alignment_dir}/${{sample}}__captus-ext" ; '
+        "fi ; "
         "done < {input.failed_samples}"
 
 
@@ -285,6 +297,7 @@ rule extract:
         refs_json=Path(outdir, "captus-assembly_extract.refs.json"),
     params:
         asms=lambda wildcards, input: Path(input.asms[0]).parent,
+        cluster_param=cluster_param,
         external_fastas=format_external_fastas,
         misc_markers=format_misc_markers,
     log:
@@ -308,8 +321,7 @@ rule extract:
         "--nuc_refs {input.target_file} "
         "--mit_refs SeedPlantsMIT "
         "--ptd_refs SeedPlantsPTD "
-        "--cluster_leftovers "
-        "--mmseqs_method easy-cluster "
+        "{params.cluster_param} "
         '--ram "$(( {resources.mem_mb}/1000 ))" '
         "--threads {threads} "
         "&> {log} "

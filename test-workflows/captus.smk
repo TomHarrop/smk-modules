@@ -73,7 +73,7 @@ misc_dna = [Path("test-data", "captus", "rhizanthella_loci.fasta")]
 captus_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/captus/Snakefile",
-    tag="0.6.1",
+    tag="0.6.5",
 )
 
 
@@ -129,6 +129,7 @@ module captus_with_wscore_cutoff:
             "read_directory": Path(output_directory, "inputs"),
             "target_file": target_file,
             "minimum_sample_wscore": "{minimum_sample_wscore}",
+            "cluster_leftovers": False,
         }
 
 
