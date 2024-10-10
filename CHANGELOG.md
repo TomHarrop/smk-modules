@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.5 (2024-10-10)
+
+### Changes
+
+* Captus: make cluster_leftovers optional.
+
 ## 0.6.4 (2024-09-20)
 
 ### Fix
