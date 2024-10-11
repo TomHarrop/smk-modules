@@ -69,12 +69,12 @@ target_file_with_duplicated_loci = Path(
 # searching 'txid158356[Organism:exp]')
 misc_dna = [Path("test-data", "captus", "rhizanthella_loci.fasta")]
 
-captus_snakefile = "../modules/captus/Snakefile"
-# captus_snakefile = github(
-#     "tomharrop/smk-modules",
-#     path="modules/captus/Snakefile",
-#     tag="0.7.0",
-# )
+# captus_snakefile = "../modules/captus/Snakefile"
+captus_snakefile = github(
+    "tomharrop/smk-modules",
+    path="modules/captus/Snakefile",
+    tag="0.7.0",
+)
 
 
 captus_alignments = ["01_AA", "02_NT", "03_genes"]
