@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.0 (2024-10-11)
+
+### Fix
+
+* Remove as much temp() output from captus as possible, so it doesn't re run all the time.
+
+* Remove as much temp() output from captus as possible, so it doesn't re run all the time.
+
 ## 0.6.5 (2024-10-10)
 
 ### Changes
