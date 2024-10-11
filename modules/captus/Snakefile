@@ -17,7 +17,16 @@ def get_external_fastas(wildcards):
         return config["external_fasta_files"]
     except KeyError:
         logger.debug("No external_fasta_files specified")
-        return None
+        return []
+
+
+def get_extract_inputs(wildcards):
+    all_samples = get_sample_list(wildcards)
+    sample_files = expand(
+        Path("{sample}", "{sample}__captus-asm"),
+        sample=all_samples,
+    )
+    return [Path(outdir, "02_assemblies", x) for x in sample_files]
 
 
 @cache
@@ -26,7 +35,7 @@ def get_misc_markers(wildcards):
         return config["misc_markers"]
     except KeyError:
         logger.debug("No misc_markers specified")
-        return None
+        return []
 
 
 def format_external_fastas(wildcards):
@@ -59,22 +68,6 @@ def format_outgroup(wildcards):
         return ""
     logger.debug(f"Setting outgroup to {outgroup}")
     return f"--outgroup {outgroup}"
-
-
-def get_extract_asms(wildcards):
-    all_samples = get_sample_list(wildcards)
-    external_fasta_files = get_external_fastas(wildcards)
-    misc_markers = get_misc_markers(wildcards)
-    sample_files = expand(
-        Path("{sample}__captus-asm"),
-        sample=all_samples,
-    )
-    sample_paths = [Path(outdir, "05_extract-input", x) for x in sample_files]
-    if external_fasta_files:
-        sample_paths = sample_paths + external_fasta_files
-    if misc_markers:
-        sample_paths = sample_paths + misc_markers
-    return sample_paths
 
 
 def get_sample_list(wildcards):
@@ -171,7 +164,8 @@ rule target:
 rule align:
     input:
         fixed_refs=extract_refs,
-        input_directory=Path(outdir, "035_alignment-input"),
+        extraction_dir=Path(outdir, "03_extractions"),
+        failed_samples=Path(statdir, "samples_failing_filter.txt"),
     output:
         outdir=directory(Path(outdir, "04_alignments")),
     params:
@@ -189,10 +183,16 @@ rule align:
     container:
         captus
     shell:
+        "cp -r {input.extraction_dir} ./align_input ; "
+        "while read sample; do "
+        "if [ -d align_input/${{sample}}__captus-ext ]; then "
+        'rm -r "align_input/${{sample}}__captus-ext" ; '
+        "fi ; "
+        "done < {input.failed_samples} && "
         "cp $( readlink -f {input.fixed_refs} ) "
-        "{input.input_directory}/captus-assembly_extract.refs.json ; "
+        "align_input/captus-assembly_extract.refs.json ; "
         "captus_assembly align "
-        "--captus_extractions_dir {input.input_directory}/ "
+        "--captus_extractions_dir ./align_input/ "
         "--out {output.outdir} "
         '--ram "$(( {resources.mem_mb}/1000 ))" '
         "--threads {threads} "
@@ -200,11 +200,10 @@ rule align:
         "&> {log}"
 
 
-
 rule replace_temporary_paths:
     input:
         tmp_json_path=Path(outdir, "captus-assembly_extract.refs.json"),
-        extraction_dir=Path(outdir, "035_alignment-input"),
+        extraction_dir=Path(outdir, "03_extractions"),
     output:
         fixed_json=Path(outdir, "captus-assembly_extract.refs.json.fixed"),
     log:
@@ -215,26 +214,8 @@ rule replace_temporary_paths:
         "scripts/replace_temporary_paths.py"
 
 
-rule setup_alignment_input:
-    input:
-        extraction_dir=Path(outdir, "03_extractions"),
-        failed_samples=Path(statdir, "samples_failing_filter.txt"),
-    output:
-        alignment_dir=temp(directory(Path(outdir, "035_alignment-input"))),
-    container:
-        bioawk
-    shadow:
-        "minimal"
-    shell:
-        "cp -r {input.extraction_dir} {output.alignment_dir} ; "
-        "while read sample; do "
-        "if [ -d {output.alignment_dir}/${{sample}}__captus-ext ]; then "
-        'rm -r "{output.alignment_dir}/${{sample}}__captus-ext" ; '
-        "fi ; "
-        "done < {input.failed_samples}"
-
-
-# lookup the median wscore for each sample and make a list of samples that pass
+# lookup the median wscore for each sample and make a list of samples that
+# failed
 rule wscore_filter:
     input:
         sample_stats_by_wscore=Path(
@@ -290,13 +271,14 @@ rule extract_summary_stats:
 
 rule extract:
     input:
-        asms=get_extract_asms,
+        assemblies=get_extract_inputs,
+        external_fasta_files=get_external_fastas,
+        misc_markers=get_misc_markers,
         target_file=target_file,
     output:
         outdir=directory(Path(outdir, "03_extractions")),
         refs_json=Path(outdir, "captus-assembly_extract.refs.json"),
     params:
-        asms=lambda wildcards, input: Path(input.asms[0]).parent,
         cluster_param=cluster_param,
         external_fastas=format_external_fastas,
         misc_markers=format_misc_markers,
@@ -313,8 +295,12 @@ rule extract:
     container:
         captus
     shell:
+        "mkdir ./extract_input && "
+        "for assembly in {input.assemblies}; do "
+        'ln -s $( readlink -f $assembly ) "$(pwd)/extract_input/" ; '
+        "done && "
         "captus_assembly extract "
-        "--captus_assemblies_dir {params.asms} "
+        "--captus_assemblies_dir ./extract_input "
         "{params.external_fastas} "
         "{params.misc_markers} "
         "--out {output.outdir}/. "
@@ -329,21 +315,6 @@ rule extract:
         "{output.refs_json}"
 
 
-rule collect_assemblies:
-    input:
-        Path(outdir, "02_assemblies", "{sample}", "{sample}__captus-asm"),
-    output:
-        temp(
-            directory(
-                Path(outdir, "05_extract-input", "{sample}__captus-asm")
-            )
-        ),
-    shell:
-        "ln -s "
-        '"$( readlink -f {input} )" '
-        '"$( readlink -f {output} )" '
-
-
 rule assemble:
     input:
         r1=Path(outdir, "reads", "{sample}_R1.fastq.gz"),
@@ -352,8 +323,6 @@ rule assemble:
         outdir=directory(
             Path(outdir, "02_assemblies", "{sample}", "{sample}__captus-asm")
         ),
-    shadow:
-        "minimal"
     params:
         outdir=lambda wildcards, output: Path(output.outdir).parent,
     log:
@@ -364,6 +333,8 @@ rule assemble:
     resources:
         time=lambda wildcards, attempt: 120 * attempt,
         mem_mb=lambda wildcards, attempt: int(16e3 * attempt),
+    shadow:
+        "minimal"
     container:
         captus
     shell:
@@ -376,6 +347,7 @@ rule assemble:
         "&> {log}"
 
 
+# this rule only runs if the reads aren't named as Captus expects.
 rule collect_reads:
     input:
         Path(read_directory, "{sample}.r{read}.fastq.gz"),
