@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.1 (2024-10-24)
+
+### Other
+
+* Allow for empty trimal outputs.
+
 ## 0.7.0 (2024-10-11)
 
 ### Fix
