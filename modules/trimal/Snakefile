@@ -102,7 +102,8 @@ rule trimal:
         "-ssc "
         "-sst "
         "> {log.stats} "
-        "2> {log.log}"
+        "2> {log.log} "
+        "&& touch {output.fasta}"
 
 
 checkpoint wait_for_input:
