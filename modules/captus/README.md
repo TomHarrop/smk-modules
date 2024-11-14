@@ -7,9 +7,9 @@ align`, and get some summary stats.
 module captus:
     snakefile:
         github(
-       "tomharrop/smk-modules",
-        path="modules/captus/Snakefile",
-        tag="0.7.0",
+            "tomharrop/smk-modules",
+            path="modules/captus/Snakefile",
+            tag="0.7.0",
         )
     config:
         {
