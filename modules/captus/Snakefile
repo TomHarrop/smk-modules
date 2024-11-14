@@ -1,5 +1,6 @@
 from functools import cache
 from snakemake.logging import logger
+from snakemake.exceptions import WildcardError
 import re
 import shutil
 import tempfile
@@ -10,50 +11,94 @@ import tempfile
 #############
 
 
-def find_cluster_file(wildcards):
-    extraction_dir = get_extraction_outdir(wildcards)
-    return [
-        Path(x).resolve()
-        for x in Path(extraction_dir).rglob("*_captus_cluster_refs.fasta")
-    ][0]
+@cache
+def get_external_fastas(wildcards):
+    try:
+        return config["external_fasta_files"]
+    except KeyError:
+        logger.debug("No external_fasta_files specified")
+        return []
 
 
-def get_align_output_files(wildcards):
-    align_outdir = checkpoints.align.get(**wildcards).output["outdir"]
-    return [x for x in Path(align_outdir).glob("**")]
-
-
-def get_align_stats(wildcards):
-    extraction_dir = get_extraction_outdir(wildcards)
-    return multiext(
-        Path(extraction_dir, "captus-assembly_extract").as_posix(),
-        ".log",
-        ".report.html",
-        ".stats.tsv",
-    )
-
-
-def get_extract_asms(wildcards):
+def get_extract_inputs(wildcards):
     all_samples = get_sample_list(wildcards)
     sample_files = expand(
-        Path("05_extract-input", "{sample}__captus-asm"),
+        Path("{sample}", "{sample}__captus-asm"),
         sample=all_samples,
     )
-    return [Path(outdir, x) for x in sample_files]
+    return [Path(outdir, "02_assemblies", x) for x in sample_files]
 
 
-def get_extraction_outdir(wildcards):
-    return checkpoints.extract.get(**wildcards).output["outdir"]
+@cache
+def get_misc_markers(wildcards):
+    try:
+        return config["misc_markers"]
+    except KeyError:
+        logger.debug("No misc_markers specified")
+        return []
 
 
-def get_refs_json(wildcards):
-    extraction_dir = get_extraction_outdir(wildcards)
-    return Path(extraction_dir, "captus-assembly_extract.refs.json.tmp")
+def format_external_fastas(wildcards):
+    external_fasta_files = get_external_fastas(wildcards)
+    if external_fasta_files:
+        external_fasta_paths = ",".join(
+            [x.as_posix() for x in external_fasta_files]
+        )
+        logger.debug(f"Setting external_fasta_files to {external_fasta_paths}")
+        return f"--fastas {external_fasta_paths}"
+    else:
+        return ""
+
+
+def format_misc_markers(wildcards):
+    misc_marker_files = get_misc_markers(wildcards)
+    if misc_marker_files:
+        misc_marker_paths = ",".join([x.as_posix() for x in misc_marker_files])
+        logger.debug(f"Setting misc_markers to {misc_marker_paths}")
+        return f"--dna_refs {misc_marker_paths}"
+    else:
+        return ""
+
+
+def format_outgroup(wildcards):
+    try:
+        outgroup = ",".join(config["outgroup"])
+    except KeyError:
+        logger.debug("No outgroup specified")
+        return ""
+    logger.debug(f"Setting outgroup to {outgroup}")
+    return f"--outgroup {outgroup}"
 
 
 def get_sample_list(wildcards):
     namelist_file = checkpoints.collect_namelist.get(**wildcards).output[0]
     return read_namelist(namelist_file)
+
+
+def get_wscore_cutoff(wildcards):
+    try:
+        minimum_sample_wscore = config["minimum_sample_wscore"]
+    except KeyError:
+        logger.warning("No minimum_sample_wscore specified")
+        return "0.0"
+    try:
+        minimum_sample_wscore = float(minimum_sample_wscore)
+        logger.warning(
+            f"Setting minimum_sample_wscore to {minimum_sample_wscore}"
+        )
+    except ValueError:
+        logger.warning("Checking if minimum_sample_wscore is a wildcard")
+        try:
+            minimum_sample_wscore = wildcards.minimum_sample_wscore
+        except AttributeError as e:
+            logger.warning(
+                """
+If you tried to set minimum_sample_wscore as a wildcard, 
+make sure the wildcard is called 'minimum_sample_wscore'
+                """
+            )
+            raise e
+    return minimum_sample_wscore
 
 
 @cache
@@ -67,15 +112,18 @@ def read_namelist(namelist):
 ###########
 
 # containers
+bioawk = "docker://quay.io/biocontainers/bioawk:1.0--he4a0461_12"
 captus = "docker://quay.io/biocontainers/captus:1.0.1--pyhdfd78af_2"
 python = "docker://python:3.10.14"
+r = "docker://ghcr.io/tomharrop/r-containers:r2u_24.04"
 
 # set up directories
 outdir = Path(config["outdir"] if "outdir" in config else ".")
 logger.debug(f"outdir: {outdir}")
 logdir = Path(outdir, "logs")
+statdir = Path(outdir, "stats")
 
-# catch samples and
+# catch samples
 namelist = config["namelist"]
 logger.debug(f"Caught namelist: {namelist}")
 
@@ -86,6 +134,15 @@ logger.debug(f"Caught read_directory: {read_directory}")
 # catch target_file
 target_file = Path(config["target_file"])
 logger.debug(f"Caught target_file: {target_file}")
+
+# catch options
+cluster_leftovers = config.get("cluster_leftovers", True)
+if cluster_leftovers:
+    cluster_param = "--cluster_leftovers --mmseqs_method easy-cluster "
+    extract_refs = Path(outdir, "captus-assembly_extract.refs.json.fixed")
+else:
+    cluster_param = ""
+    extract_refs = Path(outdir, "captus-assembly_extract.refs.json")
 
 # Captus translates the target file silently but writes it next to the input,
 # so we can't pick it up as ouput from a shadow rule.
@@ -99,19 +156,20 @@ translated_targets = target_file.with_suffix(".captus.faa")
 
 rule target:
     input:
-        get_align_output_files,
-        get_align_stats,
-        ancient(Path(outdir, "captus-assembly_extract.refs.json.fixed")),
+        Path(outdir, "04_alignments"),
+        extract_refs,
+        Path(statdir, "captus-assembly_extract.sample_stats_by_wscore.csv"),
 
 
-checkpoint align:
+rule align:
     input:
-        fixed_refs=ancient(
-            Path(outdir, "captus-assembly_extract.refs.json.fixed")
-        ),
-        input_directory=Path(outdir, "03_extractions"),
+        fixed_refs=extract_refs,
+        extraction_dir=Path(outdir, "03_extractions"),
+        failed_samples=Path(statdir, "samples_failing_filter.txt"),
     output:
         outdir=directory(Path(outdir, "04_alignments")),
+    params:
+        outgroup=format_outgroup,
     log:
         Path(logdir, "align.log"),
     benchmark:
@@ -125,39 +183,105 @@ checkpoint align:
     container:
         captus
     shell:
+        "cp -r {input.extraction_dir} ./align_input ; "
+        "while read sample; do "
+        "if [ -d align_input/${{sample}}__captus-ext ]; then "
+        'rm -r "align_input/${{sample}}__captus-ext" ; '
+        "fi ; "
+        "done < {input.failed_samples} && "
         "cp $( readlink -f {input.fixed_refs} ) "
-        "{input.input_directory}/captus-assembly_extract.refs.json ; "
+        "align_input/captus-assembly_extract.refs.json ; "
         "captus_assembly align "
-        "--captus_extractions_dir {input.input_directory}/ "
+        "--captus_extractions_dir ./align_input/ "
         "--out {output.outdir} "
         '--ram "$(( {resources.mem_mb}/1000 ))" '
         "--threads {threads} "
+        "{params.outgroup} "
         "&> {log}"
 
 
 rule replace_temporary_paths:
     input:
-        get_refs_json,
+        tmp_json_path=Path(outdir, "captus-assembly_extract.refs.json"),
+        extraction_dir=Path(outdir, "03_extractions"),
     output:
-        Path(outdir, "captus-assembly_extract.refs.json.fixed"),
-    params:
-        correct_path=lambda wildcards: find_cluster_file(wildcards),
+        fixed_json=Path(outdir, "captus-assembly_extract.refs.json.fixed"),
+    log:
+        Path(logdir, "replace_temporary_paths.log"),
     container:
         python
     script:
         "scripts/replace_temporary_paths.py"
 
 
-checkpoint extract:
+# lookup the median wscore for each sample and make a list of samples that
+# failed
+rule wscore_filter:
     input:
-        asms=get_extract_asms,
+        sample_stats_by_wscore=Path(
+            statdir, "captus-assembly_extract.sample_stats_by_wscore.csv"
+        ),
+    output:
+        failed_samples=Path(statdir, "samples_failing_filter.txt"),
+    params:
+        wscore_cutoff=get_wscore_cutoff,
+    container:
+        bioawk
+    shell:
+        "awk -F, "
+        "'NR == 1 {{ "
+        "   for (i = 1; i <= NF; i++) {{ "
+        '       if ($i == "wscore_median") wscore_col = i ; '
+        '       if ($i == "marker_type") marker_col = i ; '
+        "   }} "
+        "}}"
+        "NR > 1 "
+        "&& $wscore_col < {params.wscore_cutoff} "
+        '&& $marker_col == "NUC" '
+        "{{ print $1 }} ' "
+        "{input.sample_stats_by_wscore} "
+        "> {output.failed_samples}"
+
+
+rule extract_summary_stats:
+    input:
+        captus_extraction_dir=Path(outdir, "03_extractions"),
+    output:
+        sample_stats_by_wscore=Path(
+            statdir, "captus-assembly_extract.sample_stats_by_wscore.csv"
+        ),
+        sample_stats_by_pct_recovered=Path(
+            statdir,
+            "captus-assembly_extract.sample_stats_by_pct_recovered.csv",
+        ),
+    params:
+        captus_extraction_stats=Path(
+            outdir, "03_extractions", "captus-assembly_extract.stats.tsv"
+        ).as_posix(),
+    log:
+        Path(
+            logdir,
+            "extract_summary_stats.log",
+        ),
+    container:
+        r
+    script:
+        "scripts/extract_summary_stats.R"
+
+
+rule extract:
+    input:
+        assemblies=get_extract_inputs,
+        external_fasta_files=get_external_fastas,
+        misc_markers=get_misc_markers,
         target_file=target_file,
     output:
         outdir=directory(Path(outdir, "03_extractions")),
-    shadow:
-        "minimal"
+        refs_json=Path(outdir, "captus-assembly_extract.refs.json"),
     params:
-        asms=lambda wildcards, input: Path(input.asms[0]).parent,
+        cluster_param=cluster_param,
+        external_fastas=format_external_fastas,
+        misc_markers=format_misc_markers,
     log:
         Path(logdir, "extract.log"),
     benchmark:
@@ -166,36 +290,29 @@ checkpoint extract:
     resources:
         time=lambda wildcards, attempt: 120 * attempt,
         mem_mb=lambda wildcards, attempt: int(16e3 * attempt),
+    shadow:
+        "minimal"
     container:
         captus
     shell:
+        "mkdir ./extract_input && "
+        "for assembly in {input.assemblies}; do "
+        'ln -s $( readlink -f $assembly ) "$(pwd)/extract_input/" ; '
+        "done && "
         "captus_assembly extract "
-        "--captus_assemblies_dir {params.asms} "
+        "--captus_assemblies_dir ./extract_input "
+        "{params.external_fastas} "
+        "{params.misc_markers} "
         "--out {output.outdir}/. "
         "--nuc_refs {input.target_file} "
         "--mit_refs SeedPlantsMIT "
-        "--cluster_leftovers "
-        "--mmseqs_method easy-cluster "
+        "--ptd_refs SeedPlantsPTD "
+        "{params.cluster_param} "
         '--ram "$(( {resources.mem_mb}/1000 ))" '
         "--threads {threads} "
         "&> {log} "
         "; mv {output.outdir}/captus-assembly_extract.refs.json "
-        "{output.outdir}/captus-assembly_extract.refs.json.tmp"
-
-
-rule collect_assemblies:
-    input:
-        Path(outdir, "02_assemblies", "{sample}", "{sample}__captus-asm"),
-    output:
-        temp(
-            directory(
-                Path(outdir, "05_extract-input", "{sample}__captus-asm")
-            )
-        ),
-    shell:
-        "ln -s "
-        '"$( readlink -f {input} )" '
-        '"$( readlink -f {output} )" '
+        "{output.refs_json}"
 
 
 rule assemble:
@@ -206,8 +323,6 @@ rule assemble:
         outdir=directory(
             Path(outdir, "02_assemblies", "{sample}", "{sample}__captus-asm")
         ),
-    shadow:
-        "minimal"
     params:
         outdir=lambda wildcards, output: Path(output.outdir).parent,
     log:
@@ -218,6 +333,8 @@ rule assemble:
     resources:
         time=lambda wildcards, attempt: 120 * attempt,
         mem_mb=lambda wildcards, attempt: int(16e3 * attempt),
+    shadow:
+        "minimal"
     container:
         captus
     shell:
@@ -230,6 +347,7 @@ rule assemble:
         "&> {log}"
 
 
+# this rule only runs if the reads aren't named as Captus expects.
 rule collect_reads:
     input:
         Path(read_directory, "{sample}.r{read}.fastq.gz"),
@@ -241,7 +359,8 @@ rule collect_reads:
         '"$( readlink -f {output} )" '
 
 
-# this is to make sure the namelist ends with a newline
+# This HAS to be a checkpoint. We need to read this file to know which samples
+# we have.
 checkpoint collect_namelist:
     input:
         namelist,

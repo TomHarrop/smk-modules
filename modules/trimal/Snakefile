@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+
+from functools import cache
+from pathlib import Path
+from snakemake.logging import logger
+
+
+# this renames the fasta so that trimal can use it as input
+def get_fasta(wildcards):
+    all_fastas = [Path(x) for x in list_fastas(wildcards)]
+    return [
+        Path(alignment_directory, x)
+        for x in all_fastas
+        if x.stem == wildcards.id
+    ][0]
+
+
+def get_output_fastas(wildcards):
+    all_fastas = list_fastas(wildcards)
+    return [Path(tmp_outdir, x).with_suffix(".fasta") for x in all_fastas]
+
+
+def wait_for_input(wildcards):
+    return checkpoints.wait_for_input.get(**wildcards).output["input_ready"]
+
+
+@cache
+def list_fastas(wildcards):
+    wait_for_input(wildcards)
+    my_alignment_directory = alignment_directory.format(**wildcards)
+    fastas = [
+        f.name
+        for f in Path(my_alignment_directory).glob("*")
+        if (not f.name.startswith(".") and fasta_pattern.match(f.suffix))
+    ]
+    return fastas
+
+
+trimal = "docker://quay.io/biocontainers/trimal:1.5.0--h4ac6f70_0"
+
+# these files will be accepted as input
+fasta_extensions = ["fasta", "fa", "fna", "ffn", "faa", "frn"]
+fasta_pattern = re.compile(r".*\.(%s)$" % "|".join(fasta_extensions))
+
+
+# set up directories
+outdir = Path(config["outdir"] if "outdir" in config else ".")
+logdir = Path(outdir, "logs")
+tmpdir = Path(outdir, "tmp")
+
+# catch alignmnt directory
+alignment_directory = f"{config['alignment_directory']}"
+
+tmp_outdir = Path(tmpdir, "tmp_output")
+
+
+rule target:
+    input:
+        Path(outdir, "trimmed"),
+
+
+rule collect_output:
+    input:
+        get_output_fastas,
+    output:
+        directory(Path(outdir, "trimmed")),
+    params:
+        tmp_outdir=lambda wildcards, input: Path(input[0]).parent,
+    resources:
+        time=lambda wildcards, attempt: 10 * attempt,
+    # to prevent the slow NFS transfer taking time away from the rule
+    shadow:
+        "copy-minimal"
+    shell:
+        "cp -r {params.tmp_outdir} {output}"
+
+
+rule trimal:
+    input:
+        fasta=get_fasta,
+    output:
+        fasta=temp(Path(tmp_outdir, "{id}.fasta")),
+    log:
+        log=Path(logdir, "trimal.{id}.log"),
+        stats=Path(logdir, "trimal.{id}.stats.txt"),
+        htmlout=Path(logdir, "trimal.{id}.html"),
+    threads: 1
+    container:
+        trimal
+    shadow:
+        "minimal"
+    shell:
+        "trimal "
+        "-in {input.fasta} "
+        "-out {output.fasta} "
+        "-automated1 "
+        "-htmlout {log.htmlout} "
+        "-sgc "
+        "-sgt "
+        "-sident "
+        "-soverlap "
+        "-ssc "
+        "-sst "
+        "> {log.stats} "
+        "2> {log.log} "
+        "&& touch {output.fasta}"
+
+
+checkpoint wait_for_input:
+    input:
+        alignment_directory=alignment_directory,
+    output:
+        input_ready=touch(Path(outdir, "input_ready")),

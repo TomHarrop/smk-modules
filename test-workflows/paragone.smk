@@ -11,7 +11,7 @@ internal_outgroup = "80974"  # taxon id?
 paragone_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/paragone/Snakefile",
-    tag="0.2.11",
+    tag="0.4.5",
 )
 # paragone_snakefile = "../modules/paragone/Snakefile"
 
@@ -67,6 +67,7 @@ module paragone_internal:
             "internal_outgroup": internal_outgroup,
             "paralog_sequences": paralog_sequences,
             "outdir": Path("test-output", "paragone", "internal"),
+            "max_gap_fract": 0.1,  # e.g. 95th quantile
             "pool": 3,
         }
 
