@@ -6,7 +6,11 @@ align`, and get some summary stats.
 ```python
 module captus:
     snakefile:
-        captus_snakefile
+        github(
+       "tomharrop/smk-modules",
+        path="modules/captus/Snakefile",
+        tag="0.7.0",
+        )
     config:
         {
             "namelist": Path("test-data", "captus", "namelist.txt"),
