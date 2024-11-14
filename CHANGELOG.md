@@ -1,5 +1,17 @@
 # Changelog
 
+## (unreleased)
+
+### Changes
+
+* Captus readme.
+
+### Other
+
+* Merge pull request #3 from TomHarrop/no_moar_wildcards.
+
+  Trying to reduce the number of checkpionts, because they cause trouble
+
 ## 0.7.1 (2024-10-24)
 
 ### Other
