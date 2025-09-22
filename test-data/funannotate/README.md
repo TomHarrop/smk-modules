@@ -64,6 +64,8 @@ apptainer exec \
 
 ### get the eggnog DB
 
+Note 2025-09-22: The database is now at http://eggnog5.embl.de/download/emapperdb-5.0.2/eggnog.db.gz
+
 ```bash
 
 mkdir -p test-data/funannotate/eggnog/
