@@ -76,7 +76,7 @@ fa_config = {
     "run_tmpdir": run_tmpdir,
     "species_name": "testspecies",
     "busco_seed_species": "arabidopsis",
-    "busco_db": "embryophyta",
+    "busco_db": "eukaryota_odb10",
 }
 
 ################################################################################
