@@ -22,8 +22,8 @@ fa_snakefile = github(
     tag="0.0.40",
 )
 
-# from http://bioinf.uni-greifswald.de/augustus/datasets/RNAseq.bam
-genome = Path("test-data", "braker3", "genome.fa.gz")
+# from https://usegalaxy.org.au/api/datasets/a6e389a98c2d167899aee4f74ae9c9e6/display?to_ext=fasta.gz
+genome = Path("test-data", "funannotate", "AcanthornisMagna408025.fa.gz")
 db_path = Path("test-data", "funannotate", "db")
 dmnd_db = Path("test-data", "funannotate", "eggnog", "eggnog_proteins.dmnd")
 eggnog_db = Path("test-data", "funannotate", "eggnog", "eggnog.db")
@@ -74,8 +74,8 @@ fa_config = {
     "outdir": outdir,
     "query_genome": genome,
     "run_tmpdir": run_tmpdir,
-    "species_name": "testspecies",
-    "busco_seed_species": "arabidopsis",
+    "species_name": "AcanthornisMagna408025",
+    "busco_seed_species": "chicken",
     "busco_db": "eukaryota_odb10",
 }
 
