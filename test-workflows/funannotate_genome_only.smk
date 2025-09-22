@@ -35,7 +35,7 @@ bbmap_adaptors = Path(
 
 outdir = Path(
     "test-output",
-    "funannotate",
+    "funannotate_genome_only",
 )
 logdir = Path(outdir, "logs")
 # avoid rerunning steps
