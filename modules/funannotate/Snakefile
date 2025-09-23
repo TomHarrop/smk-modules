@@ -403,6 +403,7 @@ if use_rnaseq:
             "--right {input.right} "
             "--stranded RF "
             "--max_intronlen 10000 "
+            "--no_trimmomatic "
             f'--species "{species_name}" '
             f"--header_length {header_length} "
             "--cpus {threads} "
