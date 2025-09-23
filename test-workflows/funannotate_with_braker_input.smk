@@ -29,6 +29,10 @@ db_path = Path("test-data", "funannotate", "db")
 dmnd_db = Path("test-data", "funannotate", "eggnog", "eggnog_proteins.dmnd")
 eggnog_db = Path("test-data", "funannotate", "eggnog", "eggnog.db")
 
+# use output from braker as evidence (just for testing)
+protein_evidence = Path("test-data", "funannotate", "braker.aa")
+transcript_evidence = Path("test-data", "funannotate", "braker.codingseq")
+
 # this is the path to the included adaptors file in bbmap
 bbmap_adaptors = Path(
     "/usr", "local", "opt", "bbmap-39.01-1", "resources", "adapters.fa"
@@ -36,7 +40,7 @@ bbmap_adaptors = Path(
 
 outdir = Path(
     "test-output",
-    "funannotate",
+    "funannotate_with_braker_input",
 )
 logdir = Path(outdir, "logs")
 # avoid rerunning steps
@@ -69,14 +73,17 @@ fa_config = {
     "eggnog_db": eggnog_db,
     "gm_key": Path("test-data", "funannotate", "gm_key_64"),
     "header_length": 200,
+    # "interproscan_container": False,
     "interproscan_container": "interproscan_5.65-97.0_cv3.sif",
     "min_training_models": 20,
     "outdir": outdir,
+    "protein_evidence": protein_evidence,
     "query_genome": genome,
     "rnaseq_r1": Path(outdir, "reads", "reads.trimmed.r1.fq.gz"),
     "rnaseq_r2": Path(outdir, "reads", "reads.trimmed.r2.fq.gz"),
     "run_tmpdir": run_tmpdir,
     "species_name": "testspecies",
+    "transcript_evidence": transcript_evidence,
     "busco_seed_species": "arabidopsis",
     "busco_db": "embryophyta",
 }
