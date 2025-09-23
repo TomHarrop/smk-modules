@@ -67,7 +67,7 @@ fa_config = {
     "db_path": db_path,
     "dmnd_db": dmnd_db,
     "eggnog_db": eggnog_db,
-    "gm_key": Path("test-data", "funannotate", "gm_key_64"),
+    "gm_key": Path("test-data", "funannotate", "gm_key"),
     "header_length": 200,
     "interproscan_container": "interproscan_5.65-97.0_cv3.sif",
     "min_training_models": 20,
