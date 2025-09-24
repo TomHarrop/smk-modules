@@ -339,6 +339,10 @@ rule predict:
     container:
         funannotate
     shell:
+        "ls -lh /usr/local/lib/python3.11/site-packages/funannotate/aux_scripts/augustus_parallel.py ; "
+        "chmod +x /usr/local/lib/python3.11/site-packages/funannotate/aux_scripts/augustus_parallel.py ; "
+        "ls -lh /usr/local/lib/python3.11/site-packages/funannotate/aux_scripts/augustus_parallel.py ; "
+        "exit 1 ; "
         "export FUNANNOTATE_DB={params.db} ; "
         "cp {input.gm_key} ${{HOME}}/.gm_key ; "
         "funannotate predict "
