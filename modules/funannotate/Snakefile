@@ -103,12 +103,10 @@ except KeyError as e:
 # do we have transcript / protein evidence?
 try:
     protein_evidence = config["protein_evidence"]
-    predict_evidence["protein_evidence"] = Path(
-        protein_evidence.resolve().as_posix()
+    predict_evidence["protein_evidence"] = Path(protein_evidence.resolve().as_posix())
+    predict_params["protein_evidence"] = (
+        f'--protein_evidence {predict_evidence["protein_evidence"]} '
     )
-    predict_params[
-        "protein_evidence"
-    ] = f'--protein_evidence {predict_evidence["protein_evidence"]} '
 except KeyError as e:
     logger.info("No protein evidence provided, skipping")
 
@@ -117,9 +115,9 @@ try:
     predict_evidence["transcript_evidence"] = Path(
         transcript_evidence.resolve().as_posix()
     )
-    predict_params[
-        "transcript_evidence"
-    ] = f'--transcript_evidence {predict_evidence["transcript_evidence"]} '
+    predict_params["transcript_evidence"] = (
+        f'--transcript_evidence {predict_evidence["transcript_evidence"]} '
+    )
 except KeyError as e:
     logger.info("No transcript evidence provided, skipping")
 
@@ -167,9 +165,7 @@ try:
         annotate_input["ipr"] = Path(
             outdir, "interproscan", f"{species_name}.proteins.fa.xml"
         )
-        interproscan = (
-            Path(config["interproscan_container"]).resolve().as_posix()
-        )
+        interproscan = Path(config["interproscan_container"]).resolve().as_posix()
         ipr_param["ipr"] = f'--iprscan {Path(annotate_input["ipr"]).resolve()}'
 except KeyError as e:
     logger.error(
@@ -223,9 +219,7 @@ rule annotate:
         indir=lambda wildcards, input: Path(input.gff).parent.resolve(),
         eggnog=lambda wildcards, input: Path(input.eggnog).resolve(),
         db=lambda wildcards, input: Path(input.db).resolve(),
-        wd=lambda wildcards, output: Path(
-            output.annotations
-        ).parent.parent.resolve(),
+        wd=lambda wildcards, output: Path(output.annotations).parent.parent.resolve(),
     log:
         Path(logdir, "funannotate_annotate.log").resolve(),
     threads: workflow.cores
@@ -256,9 +250,7 @@ rule interproscan:
             f"{species_name}.proteins.fa",
         ),
     output:
-        annotations=Path(
-            outdir, "interproscan", f"{species_name}.proteins.fa.xml"
-        ),
+        annotations=Path(outdir, "interproscan", f"{species_name}.proteins.fa.xml"),
     params:
         wd=lambda wildcards, output: Path(output.annotations).parent,
     log:
@@ -386,9 +378,7 @@ if use_rnaseq:
             ),
         params:
             fasta=lambda wildcards, input: Path(input.fasta).resolve(),
-            wd=lambda wildcards, output: Path(
-                output.gff
-            ).parent.parent.resolve(),
+            wd=lambda wildcards, output: Path(output.gff).parent.parent.resolve(),
         log:
             Path(logdir, "funannotate_train.log").resolve(),
         threads: workflow.cores
@@ -396,6 +386,8 @@ if use_rnaseq:
             funannotate
         shell:
             "cp {input.gm_key} ${{HOME}}/.gm_key ; "
+            'export PATH="${{PATH}}:/usr/local/opt/transdecoder/util" ; '
+            "echo $PATH ; "
             "funannotate train "
             "--input {params.fasta} "
             "--out {params.wd} "
