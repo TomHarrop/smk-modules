@@ -387,7 +387,6 @@ if use_rnaseq:
         shell:
             "cp {input.gm_key} ${{HOME}}/.gm_key ; "
             'export PATH="${{PATH}}:/usr/local/opt/transdecoder/util" ; '
-            "echo $PATH ; "
             "funannotate train "
             "--input {params.fasta} "
             "--out {params.wd} "
