@@ -15,6 +15,7 @@ query_genome = Path("test-data", "braker3", "genome.fa.gz")
 # from http://bioinf.uni-greifswald.de/augustus/datasets/RNAseq.bam
 rnaseq = Path("test-data", "braker3", "RNAseq.bam")
 # output from braker3 test3_4.sh
+# download from https://github.com/Gaius-Augustus/BRAKER/blob/master/example/results/test3_4/braker.gtf
 ref_annot = Path("test-data", "braker3", "braker.gtf")
 
 species_name = "test_species"
