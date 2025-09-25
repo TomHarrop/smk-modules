@@ -25,8 +25,6 @@ fa_snakefile = "../modules/funannotate/Snakefile"
 # from https://usegalaxy.org.au/api/datasets/a6e389a98c2d1678c28e1f5543997b40/display?to_ext=fasta
 genome = Path("test-data", "funannotate", "AcanthornisMagna408025.fa.gz")
 db_path = Path("test-data", "funannotate", "db")
-dmnd_db = Path("test-data", "funannotate", "eggnog", "eggnog_proteins.dmnd")
-eggnog_db = Path("test-data", "funannotate", "eggnog", "eggnog.db")
 
 # this is the path to the included adaptors file in bbmap
 bbmap_adaptors = Path(
@@ -64,8 +62,8 @@ run_tmpdir = Path(outdir, "tmp")
 
 fa_config = {
     "db_path": db_path,
-    "dmnd_db": dmnd_db,
-    "eggnog_db": eggnog_db,
+    "dmnd_db": "",
+    "eggnog_db": "",
     "gm_key": Path("test-data", "funannotate", "gm_key"),
     "header_length": 200,
     "interproscan_container": False,
