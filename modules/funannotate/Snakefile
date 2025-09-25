@@ -22,7 +22,7 @@ def collect_input(wildcards):
 bbmap = "docker://quay.io/biocontainers/bbmap:39.01--h92535d8_1"
 braker3 = "docker://teambraker/braker3:v.1.0.4"
 eggnog = "docker://quay.io/biocontainers/eggnog-mapper:2.1.12--pyhdfd78af_0"
-funannotate = "docker://ghcr.io/tomharrop/container-funannotate:1.8.17_cv4"
+funannotate = "docker://ghcr.io/tomharrop/container-funannotate:1.8.17_cv5"
 seqkit = "docker://quay.io/biocontainers/seqkit:2.5.1--h9ee0642_0"
 
 # this is the path to the included adaptors file in bbmap
@@ -386,7 +386,6 @@ if use_rnaseq:
             funannotate
         shell:
             "cp {input.gm_key} ${{HOME}}/.gm_key ; "
-            'export PATH="${{PATH}}:/usr/local/opt/transdecoder/util" ; '
             "funannotate train "
             "--input {params.fasta} "
             "--out {params.wd} "

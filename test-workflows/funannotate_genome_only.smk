@@ -15,12 +15,12 @@ import tempfile
 ###########
 
 
-# fa_snakefile = "../modules/funannotate/Snakefile"
-fa_snakefile = github(
-    "tomharrop/smk-modules",
-    path="modules/funannotate/Snakefile",
-    tag="0.0.40",
-)
+fa_snakefile = "../modules/funannotate/Snakefile"
+# fa_snakefile = github(
+#     "tomharrop/smk-modules",
+#     path="modules/funannotate/Snakefile",
+#     tag="0.0.40",
+# )
 
 # from https://usegalaxy.org.au/api/datasets/a6e389a98c2d1678c28e1f5543997b40/display?to_ext=fasta
 genome = Path("test-data", "funannotate", "AcanthornisMagna408025.fa.gz")
@@ -69,7 +69,6 @@ fa_config = {
     "gm_key": Path("test-data", "funannotate", "gm_key"),
     "header_length": 200,
     "interproscan_container": False,
-    "interproscan_container": "interproscan_5.65-97.0_cv3.sif",
     "min_training_models": 20,
     "outdir": outdir,
     "query_genome": genome,
@@ -96,3 +95,7 @@ module funannotate:
 use rule * from funannotate as funannotate_*
 
 
+rule target:
+    default_target: True
+    input:
+        rules.funannotate_predict.output,
