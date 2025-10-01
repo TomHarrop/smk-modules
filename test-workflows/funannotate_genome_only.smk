@@ -59,6 +59,8 @@ run_tmpdir = Path(outdir, "tmp")
 #   - run funannotate database --show-buscos to find a list of species you can
 #     use for busco_db
 #   - you can add busco lineages to the db folder to make them available
+#   - the odb12 lineages don't work ("Impossible to read the lengths in
+#     path/to/passeriformes_odb12/lengths_cutoff")
 
 fa_config = {
     "db_path": db_path,
@@ -73,7 +75,7 @@ fa_config = {
     "run_tmpdir": run_tmpdir,
     "species_name": "AcanthornisMagna408025",
     "busco_seed_species": "chicken",
-    "busco_db": "passeriformes_odb12",
+    "busco_db": "passeriformes_odb10",
 }
 
 ################################################################################
