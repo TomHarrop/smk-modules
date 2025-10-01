@@ -73,7 +73,7 @@ fa_config = {
     "run_tmpdir": run_tmpdir,
     "species_name": "AcanthornisMagna408025",
     "busco_seed_species": "chicken",
-    "busco_db": "eukaryota_odb10",
+    "busco_db": "passeriformes_odb12",
 }
 
 ################################################################################
